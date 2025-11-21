@@ -486,43 +486,19 @@ function handleShellConnection(ws) {
       if (data.type === 'init') {
         // Initialize shell with project path and session info
         const projectPath = data.projectPath || process.cwd();
-        const {sessionId, hasSession} = data;
         // First send a welcome message
-        const welcomeMsg = hasSession ?
-          `\x1b[36mResuming Gemini session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-          `\x1b[36mStarting new Gemini session in: ${projectPath}\x1b[0m\r\n`;
+        const welcomeMsg = `\x1b[36mTerminal started in: ${projectPath}\x1b[0m\r\n`;
         ws.send(JSON.stringify({
           type: 'output',
           data: welcomeMsg
         }));
         try {
-          // Get gemini command from environment or use default
-          const geminiPath = process.env.GEMINI_PATH || 'gemini';
-          // First check if gemini CLI is available
-          try {
-            execSync(`which ${geminiPath}`, { stdio: 'ignore' });
-          } catch (error) {
-            // console.error('❌ Gemini CLI not found in PATH or GEMINI_PATH');
-            ws.send(JSON.stringify({
-              type: 'output',
-              data: `\r\n\x1b[31mError: Gemini CLI not found. Please check:\x1b[0m\r\n\x1b[33m1. Install gemini globally: npm install -g @google/generative-ai-cli\x1b[0m\r\n\x1b[33m2. Or set GEMINI_PATH in .env file\x1b[0m\r\n`
-            }));
-            return;
-          }
-          // Build shell command that changes to project directory first, then runs gemini
-          let geminiCommand = geminiPath;
-          if (hasSession && sessionId) {
-            // Try to resume session, but with fallback to new session if it fails
-            geminiCommand = `${geminiPath} --resume ${sessionId} || ${geminiPath}`;
-          }
-          // Create shell command that cds to the project directory first
-          const shellCommand = `cd "${projectPath}" && ${geminiCommand}`;
-          // Start shell using PTY for proper terminal emulation
-          shellProcess = pty.spawn('bash', ['-c', shellCommand], {
+          // Start general-purpose shell using PTY for proper terminal emulation
+          shellProcess = pty.spawn('bash', [], {
             name: 'xterm-256color',
             cols: 80,
             rows: 24,
-            cwd: process.env.HOME || '/', // Start from home directory
+            cwd: projectPath, // Start directly in project directory
             env: {
               ...process.env,
               TERM: 'xterm-256color',
