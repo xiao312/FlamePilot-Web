@@ -1,0 +1,3 @@
+#!/bin/bash
+# Fake gemini command that wraps the mock utility
+python3 "$(dirname "$0")/../mock_gemini.py" "$@"
