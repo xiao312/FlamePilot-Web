@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="public/logo-n.png" alt="Gemini CLI UI" width="64" height="64">
-  <h1>Gemini CLI Web UI</h1>
+  <img src="public/logo-n.png" alt="FlamePilot Web UI" width="64" height="64">
+  <h1>FlamePilot Web UI</h1>
 </div>
 
 
 
-A desktop and mobile UI for [Gemini CLI](https://github.com/google-gemini/gemini-cli), Google's official CLI for AI-assisted coding. You can use it locally or remotely to view your active projects and sessions in Gemini CLI and make changes to them the same way you would do it in Gemini CLI. This gives you a proper interface that works everywhere.
+FlamePilot Web UI is a modern, responsive interface for FlamePilot CLI, Google's Gemini-powered AI assistant for coding. Adapted from [Gemini-CLI-Web](https://github.com/ssdeanx/Gemini-CLI-Web) and [Gemini-CLI-UI](https://github.com/cruzyjapan/Gemini-CLI-UI), it provides desktop and mobile access to FlamePilot CLI functionality with enhanced features and improved user experience. You can use it locally or remotely to view your active projects and sessions in FlamePilot CLI and make changes the same way you would in the CLI.
 
 ## Technologies Used
 
@@ -51,18 +51,18 @@ A desktop and mobile UI for [Gemini CLI](https://github.com/google-gemini/gemini
 <h3>Chat View</h3>
 <img src="public/screenshots/gemini-cli-ui-diagram-en.png" alt="Desktop Interface" width="800">
 <br>
-<em>Gemini CLI UI Diagram</em>
+<em>FlamePilot Web UI Diagram</em>
 </td>
 </table>
 </div align="center">
 
 <div align="center">
-<h3>Updates to Gemini CLI Web UI</h3>
-<img src="public/screenshots/Screenshot from 2025-07-27 11-02-53.png" alt="Gemini CLI Monaco Code Editor" width="800">
-<em>Monaco Code Editor for editing files in Gemini CLI UI</em>
+<h3>Updates to FlamePilot Web UI</h3>
+<img src="public/screenshots/Screenshot from 2025-07-27 11-02-53.png" alt="FlamePilot Monaco Code Editor" width="800">
+<em>Monaco Code Editor for editing files in FlamePilot Web UI</em>
 <br>
 
-<img src="public/screenshots/Screenshot from 2025-07-23 11-22-18.png" alt="Gemini CLI Monaco Code Editor" width="800">
+<img src="public/screenshots/Screenshot from 2025-07-23 11-22-18.png" alt="FlamePilot Monaco Code Editor" width="800">
 <em>Spec File Generation</em>
 <br>
 
@@ -70,9 +70,10 @@ A desktop and mobile UI for [Gemini CLI](https://github.com/google-gemini/gemini
 
 ## Features
 
-- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Gemini CLI from mobile
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Gemini CLI
-- **Integrated Shell Terminal** - Direct access to Gemini CLI through built-in shell functionality
+- **FlamePilot CLI Integration** - Direct interface to FlamePilot CLI with real-time communication and session management
+- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use FlamePilot CLI from mobile
+- **Interactive Chat Interface** - Built-in chat interface for seamless communication with FlamePilot CLI
+- **Integrated Shell Terminal** - Direct access to FlamePilot CLI through built-in shell functionality
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
@@ -83,16 +84,16 @@ A desktop and mobile UI for [Gemini CLI](https://github.com/google-gemini/gemini
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20 or higher
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and configured
+- [Node.js](https://nodejs.org/) v20.19.3 (recommended for development)
+- [FlamePilot CLI](https://github.com/flamepilot/cli) installed and configured
 
 ### Installation
 
 1. **Clone the repository:**
 
 ```bash
-git clone https://github.com/ssdeanx/Gemini-CLI-Web.git
-cd gemini-cli-web
+git clone https://github.com/flamepilot/web-ui.git
+cd flamepilot-web-ui
 ```
 
 2. **Install dependencies:**
@@ -122,13 +123,26 @@ The application will start at the port you specified in your .env
 5. **Open your browser:**
    - Development: `http://localhost:4009`
 
+## Development Environment
+
+This project is developed using Node.js v20.19.3. For consistent development experience:
+
+```bash
+# Using nvm (recommended)
+nvm use 20.19.3
+
+# Verify version
+node --version  # v20.19.3
+npm --version   # Compatible npm version
+```
+
 ## Security & Tools Configuration
 
-**🔒 Important Notice**: All Gemini CLI tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
+**🔒 Important Notice**: All FlamePilot CLI tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
 
 ### Enabling Tools
 
-To use Gemini CLI's full functionality, you'll need to manually enable tools:
+To use FlamePilot CLI's full functionality, you'll need to manually enable tools:
 
 1. **Open Tools Settings** - Click the gear icon in the sidebar
 2. **Enable Selectively** - Turn on only the tools you need
@@ -136,7 +150,7 @@ To use Gemini CLI's full functionality, you'll need to manually enable tools:
 
 ### About YOLO Mode
 
-YOLO mode ("You Only Live Once") is equivalent to Gemini CLI's `--yolo` flag, skipping all confirmation prompts. This mode speeds up your work but should be used with caution.
+YOLO mode ("You Only Live Once") is equivalent to FlamePilot CLI's `--yolo` flag, skipping all confirmation prompts. This mode speeds up your work but should be used with caution.
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
@@ -146,7 +160,7 @@ YOLO mode ("You Only Live Once") is equivalent to Gemini CLI's `--yolo` flag, sk
 
 #### Project Management
 
-The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` and provides:
+The UI automatically discovers FlamePilot CLI projects from `~/.flamepilot/projects/` and provides:
 
 - **Visual Project Browser** - All available projects with metadata and session counts
 - **Project Actions** - Rename, delete, and organize projects
@@ -154,7 +168,7 @@ The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` an
 
 #### Chat Interface
 
-- **Use responsive chat or Gemini CLI** - You can either use the adapted chat interface or use the shell button to connect to Gemini CLI
+- **Use responsive chat or FlamePilot CLI** - You can either use the adapted chat interface or use the shell button to connect to FlamePilot CLI
 - **Real-time Communication** - Stream responses from Gemini with WebSocket connection
 - **Session Management** - Resume previous conversations or start fresh sessions
 - **Message History** - Complete conversation history with timestamps and metadata
@@ -207,7 +221,7 @@ The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` an
 - **User Input** - User input is used to generate the spec files
 - **Retry and Save** - Retry and save the generated spec files
 - **Save Spec Files** - Save the generated spec files, in the project spec folder
-- **Use Spec Files** - Use the generated spec files in Gemini CLI for further development, features, and more.
+- **Use Spec Files** - Use the generated spec files in FlamePilot CLI for further development, features, and more.
 
 ## Architecture
 
@@ -215,7 +229,7 @@ The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` an
 
 ```bash
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Gemini CLI     │
+│   Frontend      │    │   Backend       │    │ FlamePilot CLI  │
 │   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -224,7 +238,7 @@ The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` an
 
 - **Express Server** - RESTful API with static file serving (Port: 4008)
 - **WebSocket Server** - Communication for chats and project refresh
-- **Gemini CLI Integration** - Process spawning and management
+- **FlamePilot CLI Integration** - Process spawning and management
 - **Session Management** - JSONL parsing and conversation persistence
 - **File System API** - Exposing file browser for projects
 - **Authentication System** - Secure login and session management (SQLite database: geminicliui_auth.db)
@@ -288,14 +302,14 @@ The UI automatically discovers Gemini CLI projects from `~/.gemini/projects/` an
 
 ### Common Issues & Solutions
 
-#### "No Gemini projects found"
+#### "No FlamePilot projects found"
 
 **Problem**: The UI shows no projects or empty project list
 **Solutions**:
 
-- Ensure Gemini CLI is properly installed
-- Run `gemini` command in at least one project directory to initialize
-- Verify `~/.gemini/projects/` directory exists and has proper permissions
+- Ensure FlamePilot CLI is properly installed
+- Run `flamepilot` command in at least one project directory to initialize
+- Verify `~/.flamepilot/projects/` directory exists and has proper permissions
 
 #### File Explorer Issues
 
@@ -337,7 +351,7 @@ This project is open source and free to use, modify, and distribute under the GP
 
 ### Original Project
 
-This project is based on [Claude Code UI](https://github.com/siteboon/claudecodeui) (GPL v3.0) with customizations.
+This project is adapted from [Gemini-CLI-Web](https://github.com/ssdeanx/Gemini-CLI-Web) and [Gemini-CLI-UI](https://github.com/cruzyjapan/Gemini-CLI-UI), originally based on [Claude Code UI](https://github.com/siteboon/claudecodeui) (GPL v3.0) with customizations.
 
 ### Graph
 
@@ -404,18 +418,18 @@ graph TD
     subgraph "Node.js Server (Backend)"
         ExpressServer(Express Server)
         WebSocketServer(WebSocket Server)
-        GeminiCLIBridg(Gemini CLI Bridge)
+        FlamePilotCLIBridge(FlamePilot CLI Bridge)
         SessionManager(Session Manager)
         AuthLayer(Auth Layer)
         GitAPI(Git API)
     end
 
     subgraph "Local System"
-        GeminiCLIProcess(Gemini CLI Process)
+        FlamePilotCLIProcess(FlamePilot CLI Process)
         ProjectFiles(Project Files)
         GitRepository(Git Repository)
         SQLiteDB(SQLite DB)
-        GeminiConfigFiles(gemini config files)
+        FlamePilotConfigFiles(flamepilot config files)
     end
 
     subgraph "External Services"
@@ -482,23 +496,23 @@ graph TD
     ExpressServer --> ProjectFiles
     ExpressServer --> OpenAIWhisperAPI
 
-    GeminiCLIBridg --> SessionManager
-    GeminiCLIBridg --> GeminiCLIProcess
+    FlamePilotCLIBridge --> SessionManager
+    FlamePilotCLIBridge --> FlamePilotCLIProcess
 
     AuthLayer --> SQLiteDB
     GitAPI --> GitRepository
-    SessionManager --> GeminiConfigFiles
-    GeminiCLIProcess --> ProjectFiles
+    SessionManager --> FlamePilotConfigFiles
+    FlamePilotCLIProcess --> ProjectFiles
 end
 ```
 
 **Major Changes:**
 
-- Adapted from Claude CLI to Gemini CLI
+- Adapted from Gemini CLI to FlamePilot CLI
 - Added authentication system (SQLite-based)
-- Gemini-specific model selection feature
-- Enhanced Japanese language support
-- UI adjustments and Gemini branding
+- FlamePilot-specific model selection and features
+- Enhanced localization and language support
+- UI adjustments and FlamePilot branding
 
 Thanks to the original Claude Code UI project.
 
@@ -506,12 +520,13 @@ Thanks to the original Claude Code UI project.
 
 ### Built With
 
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** - Google's official CLI
+- **[FlamePilot CLI](https://github.com/flamepilot/cli)** - AI-powered coding assistant
 - **[React](https://react.dev/)** - User interface library
 - **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
 - **[CodeMirror](https://codemirror.net/)** - Advanced code editor
-- **[Gemini CLI UI](https://github.com/cruzyjapan/Gemini-CLI-UI)** - Orginal project
+- **[Gemini-CLI-Web](https://github.com/ssdeanx/Gemini-CLI-Web)** - Original project adaptation
+- **[Gemini-CLI-UI](https://github.com/cruzyjapan/Gemini-CLI-UI)** - Additional features source
 
 ## Support & Community
 
