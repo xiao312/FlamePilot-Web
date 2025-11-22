@@ -7,6 +7,7 @@ import sessionManager from './sessionManager.js';
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 async function spawnGemini(command, options = {}, ws) {
+  console.log('Spawning Gemini CLI for command:', command);
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -26,6 +27,7 @@ async function spawnGemini(command, options = {}, ws) {
     
     // Build Gemini CLI command - start with print/resume flags first
     const args = [];
+    console.log('Building Gemini CLI command with args:', args);
     
     // Add prompt flag with command if we have a command
     if (command && command.trim()) {
@@ -192,11 +194,11 @@ async function spawnGemini(command, options = {}, ws) {
     // Skip all tool settings
     
     // console.log('Spawning Gemini CLI with args:', args);
-    // console.log('Working directory:', workingDir);
-    
+    console.log('Working directory:', workingDir);
+
     // Try to find gemini in PATH first, then fall back to environment variable
     const geminiPath = process.env.GEMINI_PATH || 'gemini';
-    // console.log('Full command:', geminiPath, args.join(' '));
+    console.log('Full command:', geminiPath, args.join(' '));
     
     const geminiProcess = spawn(geminiPath, args, {
       cwd: workingDir,
@@ -244,7 +246,7 @@ async function spawnGemini(command, options = {}, ws) {
     geminiProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
       outputBuffer += rawOutput;
-      // Debug - Raw Gemini stdout
+      console.log('Raw Gemini stdout:', rawOutput);
       hasReceivedOutput = true;
       clearTimeout(timeout);
       
@@ -263,21 +265,49 @@ async function spawnGemini(command, options = {}, ws) {
       });
       
       const filteredOutput = filteredLines.join('\n').trim();
-      
+      console.log('Filtered output:', filteredOutput, 'Type:', typeof filteredOutput, 'Length:', filteredOutput.length);
+
       if (filteredOutput) {
         // Debug - Gemini response
-        
-        // Accumulate the full response
-        fullResponse += (fullResponse ? '\n' : '') + filteredOutput;
-        
-        // Send the filtered output as a message
-        ws.send(JSON.stringify({
-          type: 'gemini-response',
-          data: {
-            type: 'message',
-            content: filteredOutput
+
+        // Check if output contains JSON lines (for mock structured testing)
+        const outputLines = filteredOutput.split('\n').filter(line => line.trim());
+        let hasStructuredData = false;
+
+        for (const line of outputLines) {
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed && typeof parsed === 'object' && parsed.type === 'gemini-response') {
+              // This is structured mock data, send it directly
+              ws.send(JSON.stringify(parsed));
+              hasStructuredData = true;
+              continue; // Process next line
+            }
+          } catch (e) {
+            // Not JSON, will be handled as text below
           }
-        }));
+
+          // Accumulate non-JSON lines as regular text response
+          if (!hasStructuredData) {
+            fullResponse += (fullResponse ? '\n' : '') + line;
+          }
+        }
+
+        // If we only had structured data, don't send text response
+        if (hasStructuredData && !fullResponse.trim()) {
+          return;
+        }
+
+        // Send accumulated text response if any
+        if (fullResponse.trim()) {
+          ws.send(JSON.stringify({
+            type: 'gemini-response',
+            data: {
+              type: 'message',
+              content: fullResponse.trim()
+            }
+          }));
+        }
       }
       
       // For new sessions, create a session ID
@@ -309,7 +339,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Handle stderr
     geminiProcess.stderr.on('data', (data) => {
       const errorMsg = data.toString();
-      // Debug - Raw Gemini stderr
+      console.log('Gemini stderr:', errorMsg);
       
       // Filter out deprecation warnings
       if (errorMsg.includes('[DEP0040]') ||
@@ -329,7 +359,7 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Handle process completion
     geminiProcess.on('close', async (code) => {
-      // console.log(`Gemini CLI process exited with code ${code}`);
+      console.log(`Gemini CLI process exited with code ${code}`);
       clearTimeout(timeout);
       
       // Clean up process reference
@@ -453,6 +483,7 @@ export {
 };
 
 async function getGeminiSpec(type, context) {
+  console.log('Generating spec for type:', type);
   return new Promise(async (resolve, reject) => {
     let fullResponse = '';
     const args = [];

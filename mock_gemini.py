@@ -26,11 +26,103 @@ def main():
         print("[DEBUG] Mock Gemini CLI starting", file=sys.stderr)
 
     if args.prompt:
-        # Simulate Gemini response
-        response = f"Mock Gemini response to: '{args.prompt}'"
+        # Prepare response chunks beforehand - complete messages like real Gemini CLI
+        base_response = f"Mock Gemini response to: '{args.prompt}'"
         if args.model:
-            response += f" (using model: {args.model})"
-        print(response)
+            base_response += f" (using model: {args.model})"
+
+        # Output both structured JSON variants for comprehensive testing
+        import json
+
+        # Variant 1: File operations
+        variant1 = {
+            "type": "gemini-response",
+            "data": {
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Read",
+                            "id": "tool_read_001",
+                            "input": {
+                                "file_path": "/path/to/file.txt"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "I found the file content. Here are the details:"
+                        },
+                        {
+                            "type": "tool_use",
+                            "name": "Write",
+                            "id": "tool_write_002",
+                            "input": {
+                                "file_path": "/path/to/output.txt",
+                                "content": "New file content"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": base_response
+                        }
+                    ]
+                }
+            }
+        }
+
+        # Variant 2: Mixed tool operations
+        variant2 = {
+            "type": "gemini-response",
+            "data": {
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Bash",
+                            "id": "tool_bash_003",
+                            "input": {
+                                "command": "ls -la",
+                                "description": "List directory contents"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Let me check the directory contents first."
+                        },
+                        {
+                            "type": "tool_use",
+                            "name": "TodoWrite",
+                            "id": "tool_todo_004",
+                            "input": {
+                                "todos": [
+                                    {
+                                        "content": "Analyze project structure",
+                                        "status": "completed",
+                                        "priority": "high",
+                                        "id": "task_001"
+                                    },
+                                    {
+                                        "content": "Implement new feature",
+                                        "status": "in_progress",
+                                        "priority": "medium",
+                                        "id": "task_002"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": base_response
+                        }
+                    ]
+                }
+            }
+        }
+
+        # Output both variants
+        print(json.dumps(variant1))
+        time.sleep(random.uniform(0.5, 1.0))  # Brief pause between variants
+        print(json.dumps(variant2))
     else:
         print("Mock Gemini: Hello! Ready to help with mock responses.")
 

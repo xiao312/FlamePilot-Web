@@ -1445,7 +1445,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      // console.log('Received WebSocket message:', latestMessage.type, latestMessage);
+      console.log('Received WebSocket message:', latestMessage.type, latestMessage);
 
       switch (latestMessage.type) {
         case 'session-created':
@@ -1464,6 +1464,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'gemini-response':
+          console.log('Processing gemini-response:', latestMessage);
           { const messageData = latestMessage.data.message || latestMessage.data;
           // Handle Gemini CLI session duplication bug workaround:
           // When resuming a session, Gemini CLI creates a new session instead of resuming.
