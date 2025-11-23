@@ -1463,8 +1463,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break;
 
-        case 'gemini-response':
-          console.log('Processing gemini-response:', latestMessage);
+        case 'cli-response':
+          console.log('Processing cli-response:', latestMessage);
           { const messageData = latestMessage.data.message || latestMessage.data;
           // Handle Gemini CLI session duplication bug workaround:
           // When resuming a session, Gemini CLI creates a new session instead of resuming.

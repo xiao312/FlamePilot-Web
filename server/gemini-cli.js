@@ -277,7 +277,7 @@ async function spawnGemini(command, options = {}, ws) {
         for (const line of outputLines) {
           try {
             const parsed = JSON.parse(line);
-            if (parsed && typeof parsed === 'object' && parsed.type === 'gemini-response') {
+            if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
               // This is structured mock data, send it directly
               ws.send(JSON.stringify(parsed));
               hasStructuredData = true;
@@ -301,7 +301,7 @@ async function spawnGemini(command, options = {}, ws) {
         // Send accumulated text response if any
         if (fullResponse.trim()) {
           ws.send(JSON.stringify({
-            type: 'gemini-response',
+            type: 'cli-response',
             data: {
               type: 'message',
               content: fullResponse.trim()

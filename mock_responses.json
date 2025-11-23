@@ -1,0 +1,83 @@
+[
+  {
+    "type": "cli-response",
+    "data": {
+      "message": {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "Read",
+            "id": "tool_read_001",
+            "input": {
+              "file_path": "/path/to/file.txt"
+            }
+          },
+          {
+            "type": "text",
+            "text": "I found the file content. Here are the details:"
+          },
+          {
+            "type": "tool_use",
+            "name": "Write",
+            "id": "tool_write_002",
+            "input": {
+              "file_path": "/path/to/output.txt",
+              "content": "New file content"
+            }
+          },
+          {
+            "type": "text",
+            "text": "Mock Gemini response to: '{args.prompt}'"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "cli-response",
+    "data": {
+      "message": {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "Bash",
+            "id": "tool_bash_003",
+            "input": {
+              "command": "ls -la",
+              "description": "List directory contents"
+            }
+          },
+          {
+            "type": "text",
+            "text": "Let me check the directory contents first."
+          },
+          {
+            "type": "tool_use",
+            "name": "TodoWrite",
+            "id": "tool_todo_004",
+            "input": {
+              "todos": [
+                {
+                  "content": "Analyze project structure",
+                  "status": "completed",
+                  "priority": "high",
+                  "id": "task_001"
+                },
+                {
+                  "content": "Implement new feature",
+                  "status": "in_progress",
+                  "priority": "medium",
+                  "id": "task_002"
+                }
+              ]
+            }
+          },
+          {
+            "type": "text",
+            "text": "Mock Gemini response to: '{args.prompt}'"
+          }
+        ]
+      }
+    }
+  }
+]

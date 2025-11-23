@@ -5,6 +5,7 @@ Mimics the basic interface of the real Gemini CLI.
 """
 
 import argparse
+import json
 import sys
 import time
 import random
@@ -26,103 +27,16 @@ def main():
         print("[DEBUG] Mock Gemini CLI starting", file=sys.stderr)
 
     if args.prompt:
-        # Prepare response chunks beforehand - complete messages like real Gemini CLI
-        base_response = f"Mock Gemini response to: '{args.prompt}'"
-        if args.model:
-            base_response += f" (using model: {args.model})"
+        # Load response templates from JSON file
 
-        # Output both structured JSON variants for comprehensive testing
-        import json
+        # Load and output all structured JSON variants for comprehensive testing
+        with open('/mnt/d/u_deepflame_agent/dev/FlamePilot-Web/mock_responses.json') as f:
+            responses = json.load(f)
 
-        # Variant 1: File operations
-        variant1 = {
-            "type": "gemini-response",
-            "data": {
-                "message": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "name": "Read",
-                            "id": "tool_read_001",
-                            "input": {
-                                "file_path": "/path/to/file.txt"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": "I found the file content. Here are the details:"
-                        },
-                        {
-                            "type": "tool_use",
-                            "name": "Write",
-                            "id": "tool_write_002",
-                            "input": {
-                                "file_path": "/path/to/output.txt",
-                                "content": "New file content"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": base_response
-                        }
-                    ]
-                }
-            }
-        }
-
-        # Variant 2: Mixed tool operations
-        variant2 = {
-            "type": "gemini-response",
-            "data": {
-                "message": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "name": "Bash",
-                            "id": "tool_bash_003",
-                            "input": {
-                                "command": "ls -la",
-                                "description": "List directory contents"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": "Let me check the directory contents first."
-                        },
-                        {
-                            "type": "tool_use",
-                            "name": "TodoWrite",
-                            "id": "tool_todo_004",
-                            "input": {
-                                "todos": [
-                                    {
-                                        "content": "Analyze project structure",
-                                        "status": "completed",
-                                        "priority": "high",
-                                        "id": "task_001"
-                                    },
-                                    {
-                                        "content": "Implement new feature",
-                                        "status": "in_progress",
-                                        "priority": "medium",
-                                        "id": "task_002"
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": base_response
-                        }
-                    ]
-                }
-            }
-        }
-
-        # Output both variants
-        print(json.dumps(variant1))
-        time.sleep(random.uniform(0.5, 1.0))  # Brief pause between variants
-        print(json.dumps(variant2))
+        for response in responses:
+            print(json.dumps(response))
+            time.sleep(random.uniform(0.5, 1.0))  # Brief pause between variants
+        raise RuntimeError("Mock script error: Simulated failure during execution")
     else:
         print("Mock Gemini: Hello! Ready to help with mock responses.")
 

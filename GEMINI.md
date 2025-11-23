@@ -495,7 +495,7 @@ graph TD
 *   **`server/index.js`** receives the WebSocket message (on the `/ws` path) and routes it to the `handleChatConnection` function.
 *   `handleChatConnection` then calls **`server/gemini-cli.js`** (`spawnGemini`) to execute the Gemini CLI command.
 *   **`server/gemini-cli.js`** spawns a `child_process` for the `gemini` CLI, passing the command and relevant options (including conversation context built from `sessionManager.js`).
-*   `server/gemini-cli.js` captures `stdout` and `stderr` from the `gemini` process and sends them back to the frontend via the WebSocket as `gemini-response`, `gemini-output`, or `gemini-error` messages.
+*   `server/gemini-cli.js` captures `stdout` and `stderr` from the `gemini` process and sends them back to the frontend via the WebSocket as `cli-response`, `gemini-output`, or `gemini-error` messages.
 *   **`ChatInterface.jsx`** receives these messages via the `useWebSocket` hook and updates the chat display in real-time.
 *   **`server/sessionManager.js`** is used by `gemini-cli.js` to build conversation context and by `server/index.js` to add user and assistant messages to the session history, which is persisted to `.json` files.
 
