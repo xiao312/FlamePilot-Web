@@ -12,7 +12,7 @@ async function spawnGemini(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
-    let fullResponse = ''; // Accumulate the full response
+    let assistantResponse = ''; // Accumulate assistant response from JSON
     
     // Process images if provided
     
@@ -26,7 +26,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Use tools settings
     
     // Build Gemini CLI command - start with print/resume flags first
-    const args = [];
+    const args = ['run',];
     console.log('Building Gemini CLI command with args:', args);
     
     // Add prompt flag with command if we have a command
@@ -37,12 +37,12 @@ async function spawnGemini(command, options = {}, ws) {
         if (context) {
           // Combine context with current command
           const fullPrompt = context + command;
-          args.push('--prompt', fullPrompt);
+          args.push('-m', fullPrompt);
         } else {
-          args.push('--prompt', command);
+          args.push('-m', command);
         }
       } else {
-        args.push('--prompt', command);
+        args.push('-m', command);
       }
     }
     
@@ -88,7 +88,7 @@ async function spawnGemini(command, options = {}, ws) {
           const modifiedCommand = command + imageNote;
           
           // Update the command in args
-          const promptIndex = args.indexOf('--prompt');
+          const promptIndex = args.indexOf('-m');
           if (promptIndex !== -1 && args[promptIndex + 1] === command) {
             args[promptIndex + 1] = modifiedCommand;
           } else if (promptIndex !== -1) {
@@ -182,7 +182,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Debug - Model from options and resume session
     const modelToUse = options.model || 'gemini-2.5-flash';
     // Debug - Using model
-    args.push('--model', modelToUse);
+    // args.push('--model', modelToUse);
     
     // Add --yolo flag if skipPermissions is enabled
     if (settings.skipPermissions) {
@@ -197,7 +197,7 @@ async function spawnGemini(command, options = {}, ws) {
     console.log('Working directory:', workingDir);
 
     // Try to find gemini in PATH first, then fall back to environment variable
-    const geminiPath = process.env.GEMINI_PATH || 'gemini';
+    const geminiPath = process.env.GEMINI_PATH || 'flame-pilot';
     console.log('Full command:', geminiPath, args.join(' '));
     
     const geminiProcess = spawn(geminiPath, args, {
@@ -240,13 +240,11 @@ async function spawnGemini(command, options = {}, ws) {
       sessionManager.addMessage(capturedSessionId, 'user', command);
     }
     
-    // Handle stdout (Gemini outputs plain text)
-    let outputBuffer = '';
+    // Handle stdout (outputs JSON lines)
     
     geminiProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
-      outputBuffer += rawOutput;
-      console.log('Raw Gemini stdout:', rawOutput);
+      console.log('Raw stdout:', rawOutput);
       hasReceivedOutput = true;
       clearTimeout(timeout);
       
@@ -264,49 +262,22 @@ async function spawnGemini(command, options = {}, ws) {
         return true;
       });
       
-      const filteredOutput = filteredLines.join('\n').trim();
-      console.log('Filtered output:', filteredOutput, 'Type:', typeof filteredOutput, 'Length:', filteredOutput.length);
-
-      if (filteredOutput) {
-        // Debug - Gemini response
-
-        // Check if output contains JSON lines (for mock structured testing)
-        const outputLines = filteredOutput.split('\n').filter(line => line.trim());
-        let hasStructuredData = false;
-
-        for (const line of outputLines) {
+      for (const line of filteredLines) {
+        if (line.trim()) {
           try {
             const parsed = JSON.parse(line);
             if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
-              // This is structured mock data, send it directly
+              // Send the structured data directly
               ws.send(JSON.stringify(parsed));
-              hasStructuredData = true;
-              continue; // Process next line
+              // Accumulate content for session saving
+              if (parsed.data && parsed.data.type === 'message' && parsed.data.content) {
+                assistantResponse += parsed.data.content + '\n';
+              }
             }
+            // Ignore non-matching JSON or non-JSON lines
           } catch (e) {
-            // Not JSON, will be handled as text below
+            // Not JSON, skip
           }
-
-          // Accumulate non-JSON lines as regular text response
-          if (!hasStructuredData) {
-            fullResponse += (fullResponse ? '\n' : '') + line;
-          }
-        }
-
-        // If we only had structured data, don't send text response
-        if (hasStructuredData && !fullResponse.trim()) {
-          return;
-        }
-
-        // Send accumulated text response if any
-        if (fullResponse.trim()) {
-          ws.send(JSON.stringify({
-            type: 'cli-response',
-            data: {
-              type: 'message',
-              content: fullResponse.trim()
-            }
-          }));
         }
       }
       
@@ -367,8 +338,8 @@ async function spawnGemini(command, options = {}, ws) {
       activeGeminiProcesses.delete(finalSessionId);
       
       // Save assistant response to session if we have one
-      if (finalSessionId && fullResponse) {
-        sessionManager.addMessage(finalSessionId, 'assistant', fullResponse);
+      if (finalSessionId && assistantResponse.trim()) {
+        sessionManager.addMessage(finalSessionId, 'assistant', assistantResponse.trim());
       }
       
       ws.send(JSON.stringify({
@@ -415,9 +386,9 @@ async function spawnGemini(command, options = {}, ws) {
     });
     
     // Handle stdin for interactive mode
-    // Gemini with --prompt flag doesn't need stdin
+    // Gemini with -m flag doesn't need stdin
     if (command && command.trim()) {
-      // We're using --prompt flag, so just close stdin
+      // We're using -m flag, so just close stdin
       geminiProcess.stdin.end();
     } else {
       // Interactive mode without initial prompt
@@ -489,7 +460,7 @@ async function getGeminiSpec(type, context) {
     const args = [];
 
     const prompt = `Generate a ${type} for a new feature. Here is the context:\n\n${context}`;
-    args.push('--prompt', prompt);
+    args.push('-m', prompt);
 
     const geminiPath = process.env.GEMINI_PATH || 'gemini';
     const geminiProcess = spawn(geminiPath, args, {
