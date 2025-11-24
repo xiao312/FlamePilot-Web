@@ -26,7 +26,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Use tools settings
     
     // Build Gemini CLI command - start with print/resume flags first
-    const args = ['run',];
+    const args = ['web',];
     console.log('Building Gemini CLI command with args:', args);
     
     // Add prompt flag with command if we have a command
@@ -45,11 +45,13 @@ async function spawnGemini(command, options = {}, ws) {
         args.push('-m', command);
       }
     }
+    let promptToUse = (sessionId && sessionManager.buildConversationContext(sessionId)) ? (sessionManager.buildConversationContext(sessionId) + command) : command;
+    promptToUse = promptToUse.replace(/\n/g, '\\n');
     
     // Use cwd (actual project directory) instead of projectPath (Gemini's metadata directory)
     // Debug - cwd and projectPath
     // Clean the path by removing any non-printable characters
-    const cleanPath = (cwd || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
+    const cleanPath = (cwd || process.cwd()).replace(/[^\x20-\x7E]/g, '').replace(/>/g, '').trim();
     const workingDir = cleanPath;
     // Debug - workingDir
     
@@ -198,9 +200,11 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Try to find gemini in PATH first, then fall back to environment variable
     const geminiPath = process.env.GEMINI_PATH || 'flame-pilot';
-    console.log('Full command:', geminiPath, args.join(' '));
-    
-    const geminiProcess = spawn(geminiPath, args, {
+    // console.log('Full command:', geminiPath, args.join(' '));
+
+    const fullCommand = `cd "${workingDir}" && ${geminiPath} web -m "${promptToUse}"`;
+    console.log('Executing command:', fullCommand);
+    const geminiProcess = spawn('bash', ['-c', fullCommand], {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
@@ -221,19 +225,19 @@ async function spawnGemini(command, options = {}, ws) {
     // Close stdin to signal we're done sending input
     geminiProcess.stdin.end();
     
-    // Add timeout handler
-    let hasReceivedOutput = false;
-    const timeoutMs = 30000; // 30 seconds
-    const timeout = setTimeout(() => {
-      if (!hasReceivedOutput) {
-        // console.error('⏰ Gemini CLI timeout - no output received after', timeoutMs, 'ms');
-        ws.send(JSON.stringify({
-          type: 'gemini-error',
-          error: 'Gemini CLI timeout - no response received'
-        }));
-        geminiProcess.kill('SIGTERM');
-      }
-    }, timeoutMs);
+    // Timeout disabled
+    // let hasReceivedOutput = false;
+    // const timeoutMs = 120000; // 2 minutes
+    // const timeout = setTimeout(() => {
+    //   if (!hasReceivedOutput) {
+    //     // console.error('⏰ Gemini CLI timeout - no output received after', timeoutMs, 'ms');
+    //     ws.send(JSON.stringify({
+    //       type: 'gemini-error',
+    //       error: 'Gemini CLI timeout - no response received'
+    //     }));
+    //     geminiProcess.kill('SIGTERM');
+    //   }
+    // }, timeoutMs);
     
     // Save user message to session when starting
     if (command && capturedSessionId) {
@@ -245,8 +249,8 @@ async function spawnGemini(command, options = {}, ws) {
     geminiProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
       console.log('Raw stdout:', rawOutput);
-      hasReceivedOutput = true;
-      clearTimeout(timeout);
+      // hasReceivedOutput = true;
+      // clearTimeout(timeout);
       
       // Filter out debug messages and system messages
       const lines = rawOutput.split('\n');
@@ -268,10 +272,20 @@ async function spawnGemini(command, options = {}, ws) {
             const parsed = JSON.parse(line);
             if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
               // Send the structured data directly
+              console.log('Sending to WebSocket:', parsed);
               ws.send(JSON.stringify(parsed));
               // Accumulate content for session saving
-              if (parsed.data && parsed.data.type === 'message' && parsed.data.content) {
-                assistantResponse += parsed.data.content + '\n';
+              if (parsed.data && parsed.data.message && parsed.data.message.content) {
+                const content = parsed.data.message.content;
+                if (Array.isArray(content)) {
+                  for (const part of content) {
+                    if (part.type === 'text' && part.text) {
+                      assistantResponse += part.text + '\n';
+                    }
+                  }
+                } else if (typeof content === 'string') {
+                  assistantResponse += content + '\n';
+                }
               }
             }
             // Ignore non-matching JSON or non-JSON lines
@@ -331,7 +345,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Handle process completion
     geminiProcess.on('close', async (code) => {
       console.log(`Gemini CLI process exited with code ${code}`);
-      clearTimeout(timeout);
+      // clearTimeout(timeout);
       
       // Clean up process reference
       const finalSessionId = capturedSessionId || sessionId || processKey;
@@ -342,11 +356,17 @@ async function spawnGemini(command, options = {}, ws) {
         sessionManager.addMessage(finalSessionId, 'assistant', assistantResponse.trim());
       }
       
-      ws.send(JSON.stringify({
-        type: 'gemini-complete',
-        exitCode: code,
-        isNewSession: !sessionId && !!command // Flag to indicate this was a new session
-      }));
+       console.log('WebSocket readyState:', ws.readyState);
+       console.log('Sending gemini-complete:', { type: 'gemini-complete', exitCode: code, isNewSession: !sessionId && !!command });
+       if (ws.readyState === 1) { // WebSocket.OPEN
+         ws.send(JSON.stringify({
+           type: 'gemini-complete',
+           exitCode: code,
+           isNewSession: !sessionId && !!command // Flag to indicate this was a new session
+         }));
+       } else {
+         console.log('WebSocket not open, cannot send gemini-complete');
+       }
       
       // Clean up temporary image files if any
       if (geminiProcess.tempImagePaths && geminiProcess.tempImagePaths.length > 0) {

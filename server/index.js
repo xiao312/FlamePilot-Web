@@ -443,6 +443,10 @@ function handleChatConnection(ws) {
   // console.log('💬 Chat WebSocket connected');
   // Add to connected clients for project updates
   connectedClients.add(ws);
+
+  // Initialize heartbeat for connection monitoring
+  ws.isAlive = true;
+  ws.on('pong', heartbeat);
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);

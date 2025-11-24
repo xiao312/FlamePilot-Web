@@ -1038,6 +1038,14 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom }) {
+  // Add WebSocket event logging
+  useEffect(() => {
+    if (ws) {
+      ws.onopen = () => console.log('WebSocket opened');
+      ws.onclose = () => console.log('WebSocket closed');
+      ws.onerror = (e) => console.log('WebSocket error:', e);
+    }
+  }, [ws]);
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return localStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -1547,27 +1555,27 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               timestamp: new Date()
             }]);
           }
-          // Handle tool results from user messages (these come separately)
-          if (messageData.role === 'user' && Array.isArray(messageData.content)) {
-            for (const part of messageData.content) {
-              if (part.type === 'tool_result') {
-                // Find the corresponding tool use and update it with the result
-                setChatMessages(prev => prev.map(msg => {
-                  if (msg.isToolUse && msg.toolId === part.tool_use_id) {
-                    return {
-                      ...msg,
-                      toolResult: {
-                        content: part.content,
-                        isError: part.is_error,
-                        timestamp: new Date()
-                      }
-                    };
-                  }
-                  return msg;
-                }));
-              }
-            }
-          }
+           // Handle tool results from messages (these come separately)
+           if (Array.isArray(messageData.content)) {
+             for (const part of messageData.content) {
+               if (part.type === 'tool_result') {
+                 // Find the corresponding tool use and update it with the result
+                 setChatMessages(prev => prev.map(msg => {
+                   if (msg.isToolUse && msg.toolId === part.id) {
+                     return {
+                       ...msg,
+                       toolResult: {
+                         content: part.content,
+                         isError: part.is_error,
+                         timestamp: new Date()
+                       }
+                     };
+                   }
+                   return msg;
+                 }));
+               }
+             }
+           }
           break; }
         case 'gemini-output':
           setChatMessages(prev => [...prev, {
@@ -1597,8 +1605,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setGeminiStatus(null);
           break;
         case 'gemini-complete':
-          // console.log('Gemini completed, setting isLoading to false');
-          { setIsLoading(false);
+           console.log('Processing gemini-complete:', latestMessage);
+           { setIsLoading(false);
           setCanAbortSession(false);
           setGeminiStatus(null);
           // Play notification sound when response is complete
