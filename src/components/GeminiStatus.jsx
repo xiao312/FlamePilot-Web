@@ -52,13 +52,13 @@ function GeminiStatus({ status, onAbort, isLoading }) {
   
   return (
     <div className="w-full mb-6 animate-in slide-in-from-bottom duration-300">
-      <div className="flex items-center justify-between max-w-4xl mx-auto bg-linear-to-r from-gemini-900 to-gemini-900 dark:from-gemini-950 dark:to-gemini-950 text-white rounded-lg shadow-elevated px-4 py-3 glow-pulse glass-morphism-dark">
+      <div className="flex items-center justify-between max-w-4xl mx-auto bg-white dark:bg-gemini-950 text-foreground dark:text-white border border-gemini-200 dark:border-gemini-800 rounded-lg shadow-elevated px-4 py-3 glass-morphism dark:glass-morphism-dark">
         <div className="flex-1">
           <div className="flex items-center gap-3">
             {/* Animated spinner */}
             <span className={cn(
               "text-2xl transition-all duration-500", // Larger spinner
-              animationPhase % 2 === 0 ? "text-gemini-400 scale-110" : "text-gemini-300"
+              animationPhase % 2 === 0 ? "text-gemini-500 scale-110" : "text-gemini-400"
             )}>
               {currentSpinner}
             </span>
@@ -66,8 +66,8 @@ function GeminiStatus({ status, onAbort, isLoading }) {
             {/* Status text - first line */}
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{statusText}...</span>
-                <span className="text-zinc-400 text-sm">({elapsedTime}s)</span>
+                <span className="font-medium text-sm text-foreground dark:text-white">{statusText}...</span>
+                <span className="text-zinc-500 dark:text-zinc-400 text-sm">({elapsedTime}s)</span>
               </div>
             </div>
           </div>

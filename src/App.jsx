@@ -257,7 +257,7 @@ function AppContent() {
     setSelectedSession(session);
     // Only switch to chat tab when user explicitly selects a session
     // This prevents tab switching during automatic updates
-    if (activeTab !== 'git' && activeTab !== 'preview') {
+    if (activeTab !== 'preview') {
       setActiveTab('chat');
     }
     if (isMobile) {

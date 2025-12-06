@@ -122,7 +122,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-zinc-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : 'Gemini'}
+                {message.type === 'error' ? 'Error' : 'FlamePilot'}
               </div>
             </div>
           )}
@@ -1074,9 +1074,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [selectedModel, setSelectedModel] = useState(() => {
     try {
       const settings = JSON.parse(localStorage.getItem('gemini-tools-settings') || '{}');
-      return settings.selectedModel || 'gemini-2.5-flash';
+      const storedModel = settings.selectedModel;
+      const allowedModels = ['gpt-5'];
+      return allowedModels.includes(storedModel) ? storedModel : 'gpt-5';
     } catch  {
-      return 'gemini-2.5-flash';
+      return 'gpt-5';
     }
   });
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
@@ -1418,10 +1420,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       try {
         const settings = JSON.parse(localStorage.getItem('gemini-tools-settings') || '{}');
         setIsYoloMode(settings.skipPermissions || false);
-        setSelectedModel(settings.selectedModel || 'gemini-2.5-flash');
+        const allowedModels = ['gpt-5'];
+        const storedModel = settings.selectedModel;
+        setSelectedModel(allowedModels.includes(storedModel) ? storedModel : 'gpt-5');
       } catch {
         setIsYoloMode(false);
-        setSelectedModel('gemini-2.5-flash');
+        setSelectedModel('gpt-5');
       }
     };
     // Check on mount and when storage changes
@@ -1433,7 +1437,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setChatMessages(prev => [...prev, {
           id: `system-${Date.now()}`,
           type: 'system',
-          content: '⚙️ 設定が更新されました。',
+          content: '⚙️ Settings updated.',
           timestamp: new Date().toISOString()
         }]);
       }
@@ -1632,21 +1636,51 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break; }
 
-        case 'session-aborted':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setGeminiStatus(null);
-          // Session Protection: Mark session as inactive when aborted
-          // User or system aborted the conversation, re-enable project updates
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
-          }
-          setChatMessages(prev => [...prev, {
-            type: 'assistant',
-            content: 'Session interrupted by user.',
-            timestamp: new Date()
-          }]);
-          break;
+         case 'session-aborted':
+           setIsLoading(false);
+           setCanAbortSession(false);
+           setGeminiStatus(null);
+           // Session Protection: Mark session as inactive when aborted
+           // User or system aborted the conversation, re-enable project updates
+           if (currentSessionId && onSessionInactive) {
+             onSessionInactive(currentSessionId);
+           }
+           setChatMessages(prev => [...prev, {
+             type: 'assistant',
+             content: 'Session interrupted by user.',
+             timestamp: new Date()
+           }]);
+           break;
+
+         case 'photon-charge':
+           if (latestMessage.error) {
+             console.warn('Photon error:', latestMessage.error);
+             // Show warning: Photon not charged or failed
+             setChatMessages(prev => [...prev, {
+               type: 'system',
+               content: `⚠️ Photon billing issue: ${latestMessage.error}`,
+               timestamp: new Date()
+             }]);
+           } else {
+             const { photonsCharged, tokensUsed, price, chargeResponse } = latestMessage.data;
+             const code = chargeResponse && chargeResponse.code;
+             console.log('Photon charged:', photonsCharged, 'tokens:', tokensUsed, 'resp:', chargeResponse);
+
+            if (code === 0) {
+              setChatMessages(prev => [...prev, {
+                type: 'system',
+                content: `This conversation used ${tokensUsed} tokens and charged ${photonsCharged} photons (${price.perQuery} photons/request + ${price.per1kTokens} photons per 1k tokens).`,
+                timestamp: new Date()
+              }]);
+            } else {
+              setChatMessages(prev => [...prev, {
+                type: 'system',
+                content: `⚠️ Photon billing failed (code=${code}). Please check your billing later.`,
+                timestamp: new Date()
+              }]);
+            }
+           }
+           break;
 
         case 'gemini-status':
           // Handle Gemini working status messages
@@ -2008,11 +2042,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const savedSettings = localStorage.getItem('gemini-tools-settings');
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
+          const allowedModels = ['gpt-5'];
+          const storedModel = settings.selectedModel;
+          const sanitizedModel = allowedModels.includes(storedModel) ? storedModel : 'gpt-5';
           return {
             allowedTools: settings.allowedTools || [],
             disallowedTools: settings.disallowedTools || [],
             skipPermissions: settings.skipPermissions || false,
-            selectedModel: settings.selectedModel || 'gemini-2.5-flash'
+            selectedModel: sanitizedModel
           };
         }
       } catch {
@@ -2022,7 +2059,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         allowedTools: [],
         disallowedTools: [],
         skipPermissions: false,
-        selectedModel: 'gemini-2.5-flash'
+        selectedModel: 'gpt-5'
       };
     };
 
@@ -2039,7 +2076,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         resume: !!currentSessionId,
         toolsSettings: toolsSettings,
         permissionMode: permissionMode,
-        model: toolsSettings.selectedModel || 'gemini-2.5-flash',
+        model: toolsSettings.selectedModel || 'gpt-5',
         images: uploadedImages // Pass images to backend
       }
     });
@@ -2202,11 +2239,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         `}
       </style>
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col bg-white dark:bg-zinc-900">
         {/* Messages Area - Scrollable Middle Section */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative bg-white dark:bg-zinc-900"
         style={{
           scrollBehavior: 'smooth',
           // Force GPU acceleration for smoother scrolling
@@ -2224,9 +2261,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-zinc-500 dark:text-zinc-400 px-6 sm:px-4">
-              <p className="font-bold text-lg sm:text-xl mb-3">Start a conversation with Gemini</p>
+              <p className="font-bold text-lg sm:text-xl mb-3">Start a conversation with FlamePilot</p>
               <p className="text-sm sm:text-base leading-relaxed">
-                Ask questions about your code, request changes, or get help with development tasks
+                Ask CFD questions, explore simulations, or request model changes
               </p>
             </div>
           </div>
@@ -2267,13 +2304,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <div className="chat-message assistant">
             <div className="w-full">
               <div className="flex items-center space-x-3 mb-2">
-                <div className="w-8 h-8 bg-zinc-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
-                  C
+                <div className="w-8 h-8 bg-gemini-600 dark:bg-gemini-500 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                  F
                 </div>
-                <div className="text-sm font-medium text-zinc-900 dark:text-white">Gemini</div>
+                <div className="text-sm font-medium text-zinc-900 dark:text-white">FlamePilot</div>
                 {/* Abort button removed - functionality not yet implemented at backend */}
               </div>
-              <div className="w-full text-sm text-zinc-500 dark:text-zinc-400 pl-3 sm:pl-0">
+              <div className="w-full text-sm text-zinc-600 dark:text-zinc-300 pl-3 sm:pl-0">
                 <div className="flex items-center space-x-1">
                   <div className="animate-pulse">●</div>
                   <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>●</div>
@@ -2290,7 +2327,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
 
       {/* Input Area - Fixed Bottom */}
-      <div className={`p-2 sm:p-4 md:p-6 flex-shrink-0 ${
+      <div className={`p-2 sm:p-4 md:p-6 flex-shrink-0 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 ${
         isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
       }`}>
         {/* Gemini Working Status - positioned above the input form */}
@@ -2310,7 +2347,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }`}>
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full animate-pulse ${isYoloMode ? 'bg-orange-500' : 'bg-cyan-500'}`} />
-                <span>{isYoloMode ? 'Gemini YOLO' : 'Gemini Default'}</span>
+                <span>{isYoloMode ? 'FlamePilot YOLO' : 'FlamePilot Default'}</span>
                 <span className="text-xs opacity-75">• {selectedModel}</span>
               </div>
             </div>
@@ -2415,7 +2452,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder="Ask Gemini to help with your code... (@ to reference files)"
+              placeholder="Ask FlamePilot to help with your CFD tasks..."
               disabled={isLoading}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-400 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
@@ -2513,12 +2550,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files
+            Press Enter to send • Shift+Enter for new line • Tab to change modes
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
-            Enter to send • Tab for modes • @ for files
+            Enter to send • Tab for modes
           </div>
         </form>
       </div>

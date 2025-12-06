@@ -6,13 +6,69 @@ import sessionManager from './sessionManager.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
+function computePhotonCharge(totalTokens) {
+  const basePerQuery = 3;
+  const per1kTokens = 3;
+
+  const tokenBlocks = Math.ceil((totalTokens || 0) / 1000);
+  return basePerQuery + tokenBlocks * per1kTokens;
+  // e.g. totalTokens = 6089 -> 3 + ceil(6.089)*3 = 3 + 6*3 = 21 photons
+}
+
+async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
+  // Dev mode mocking: don't hit real API
+  if (process.env.PHOTON_DEV_MODE === '1' && process.env.PHOTON_MOCK === '1') {
+    console.log(`[DEV-MOCK] Would charge ${eventValue} photons (skuId=${skuId})`);
+    return { statusCode: 200, body: { code: 0, mock: true } };
+  }
+
+  const url = 'https://openapi.dp.tech/openapi/v1/api/integral/consume';
+
+  // bizNo: unique int per request (timestamp + random)
+  const timestamp = Math.floor(Date.now() / 1000); // seconds
+  const rand = Math.floor(Math.random() * 9000) + 1000; // 4-digit
+  const bizNo = Number(`${timestamp}${rand}`);
+
+  const headers = {
+    'accessKey': accessKey,
+    'x-app-key': clientName,       // corresponds to CLIENT_NAME
+    'Content-Type': 'application/json',
+    'Accept': '*/*',
+  };
+
+  const payload = {
+    bizNo,
+    changeType: 1,
+    eventValue,                    // photon amount to deduct
+    skuId,                         // each app has a unique skuId
+    scene: 'appCustomizeCharge',
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    // timeout: 10_000, // fetch doesn't have timeout, maybe use AbortController
+  });
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = { rawText: await res.text() };
+  }
+
+  return { statusCode: res.status, body: data };
+}
+
 async function spawnGemini(command, options = {}, ws) {
-  console.log('Spawning Gemini CLI for command:', command);
-  return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
-    let capturedSessionId = sessionId; // Track session ID throughout the process
-    let sessionCreatedSent = false; // Track if we've already sent session-created event
-    let assistantResponse = ''; // Accumulate assistant response from JSON
+   console.log('Spawning Gemini CLI for command:', command);
+   return new Promise(async (resolve, reject) => {
+     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
+     let capturedSessionId = sessionId; // Track session ID throughout the process
+     let sessionCreatedSent = false; // Track if we've already sent session-created event
+     let assistantResponse = ''; // Accumulate assistant response from JSON
+     let lastTokenCount = 0;   // Track last token usage
     
     // Process images if provided
     
@@ -270,24 +326,31 @@ async function spawnGemini(command, options = {}, ws) {
         if (line.trim()) {
           try {
             const parsed = JSON.parse(line);
-            if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
-              // Send the structured data directly
-              console.log('Sending to WebSocket:', parsed);
-              ws.send(JSON.stringify(parsed));
-              // Accumulate content for session saving
-              if (parsed.data && parsed.data.message && parsed.data.message.content) {
-                const content = parsed.data.message.content;
-                if (Array.isArray(content)) {
-                  for (const part of content) {
-                    if (part.type === 'text' && part.text) {
-                      assistantResponse += part.text + '\n';
-                    }
+          if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
+            // Send the structured data directly
+            console.log('Sending to WebSocket:', parsed);
+            ws.send(JSON.stringify(parsed));
+
+            // Track last token usage if present
+            const usage = parsed.data && parsed.data.usage;
+            if (usage && typeof usage.total_token_count === 'number') {
+              lastTokenCount = usage.total_token_count;
+            }
+
+            // Accumulate content for session saving
+            if (parsed.data && parsed.data.message && parsed.data.message.content) {
+              const content = parsed.data.message.content;
+              if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'text' && part.text) {
+                    assistantResponse += part.text + '\n';
                   }
-                } else if (typeof content === 'string') {
-                  assistantResponse += content + '\n';
                 }
+              } else if (typeof content === 'string') {
+                assistantResponse += content + '\n';
               }
             }
+          }
             // Ignore non-matching JSON or non-JSON lines
           } catch (e) {
             // Not JSON, skip
@@ -355,7 +418,55 @@ async function spawnGemini(command, options = {}, ws) {
       if (finalSessionId && assistantResponse.trim()) {
         sessionManager.addMessage(finalSessionId, 'assistant', assistantResponse.trim());
       }
-      
+
+      // --- Photon charging begins here ---
+      try {
+        // Dev mode: use env vars; Prod mode: use options from cookies
+        const isDevMode = process.env.PHOTON_DEV_MODE === '1';
+        const accessKey = isDevMode ? (options.accessKey || process.env.DEV_ACCESS_KEY) : options.accessKey;
+        const clientName = isDevMode ? (options.clientName || process.env.CLIENT_NAME) : options.clientName;
+        const skuId = isDevMode ? (options.skuId || Number(process.env.SKU_ID)) : options.skuId;
+
+        if (accessKey && clientName && skuId && lastTokenCount >= 0) {
+          const photons = computePhotonCharge(lastTokenCount);
+          const chargeResult = await chargePhotons({
+            accessKey,
+            clientName,
+            skuId,
+            eventValue: photons,
+          });
+
+          // Notify frontend about the charge
+          ws.send(JSON.stringify({
+            type: 'photon-charge',
+            data: {
+              photonsCharged: photons,
+              tokensUsed: lastTokenCount,
+              price: {
+                perQuery: 3,
+                per1kTokens: 3,
+              },
+              chargeResponse: chargeResult.body, // { code: 0, ... } or error
+            },
+          }));
+        } else {
+          // If missing info, send a warning to frontend (but don't crash)
+          ws.send(JSON.stringify({
+            type: 'photon-charge',
+            error: 'Missing accessKey/clientName/skuId; Photon not charged',
+            tokensUsed: lastTokenCount,
+          }));
+        }
+      } catch (err) {
+        console.error('Photon charge failed:', err);
+        ws.send(JSON.stringify({
+          type: 'photon-charge',
+          error: 'Photon charging failed',
+          tokensUsed: lastTokenCount,
+        }));
+      }
+      // --- Photon charging end ---
+
        console.log('WebSocket readyState:', ws.readyState);
        console.log('Sending gemini-complete:', { type: 'gemini-complete', exitCode: code, isNewSession: !sessionId && !!command });
        if (ws.readyState === 1) { // WebSocket.OPEN

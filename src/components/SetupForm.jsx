@@ -50,7 +50,7 @@ const SetupForm = () => {
             <div className="flex justify-center mb-4">
               <GeminiLogo size={64} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome to Gemini CLI UI</h1>
+            <h1 className="text-2xl font-bold text-foreground">Welcome to FlamePilot Web</h1>
             <p className="text-muted-foreground mt-2">
               Set up your account to get started
             </p>

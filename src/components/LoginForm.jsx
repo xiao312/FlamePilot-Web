@@ -43,7 +43,7 @@ const LoginForm = () => {
             </div>
             <h1 className="text-2xl font-bold text-foreground">Welcome Back</h1>
             <p className="text-muted-foreground mt-2">
-              Sign in to your Gemini CLI UI account
+              Sign in to your FlamePilot Web account
             </p>
           </div>
 

@@ -431,7 +431,7 @@ wss.on('connection', (ws, request) => {
   if (pathname === '/shell') {
     handleShellConnection(ws);
   } else if (pathname === '/ws') {
-    handleChatConnection(ws);
+    handleChatConnection(ws, request);
   } else {
     // console.log('❌ Unknown WebSocket path:', pathname);
     ws.close();
@@ -439,10 +439,25 @@ wss.on('connection', (ws, request) => {
 });
 
 // Handle chat WebSocket connections
-function handleChatConnection(ws) {
+function handleChatConnection(ws, request) {
   // console.log('💬 Chat WebSocket connected');
   // Add to connected clients for project updates
   connectedClients.add(ws);
+
+  // Extract cookies for Photon charging
+  function parseCookies(cookieHeader) {
+    const cookies = {};
+    (cookieHeader || '').split(';').forEach(pair => {
+      const [k, v] = pair.split('=').map(s => s && s.trim());
+      if (k && v !== undefined) cookies[k] = decodeURIComponent(v);
+    });
+    return cookies;
+  }
+
+  const cookies = parseCookies(request.headers.cookie || '');
+  const accessKey = cookies.appAccessKey;
+  const clientName = cookies.clientName;
+  const skuId = process.env.PHOTON_SKU_ID || 'your-app-sku-id'; // Set your app's Photon SKU ID
 
   // Initialize heartbeat for connection monitoring
   ws.isAlive = true;
@@ -454,7 +469,12 @@ function handleChatConnection(ws) {
         // console.log('💬 User message:', data.command || '[Continue/Resume]');
         // console.log('📁 Project:', data.options?.projectPath || 'Unknown');
         // console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-        await spawnGemini(data.command, data.options, ws);
+        await spawnGemini(data.command, {
+          ...data.options,
+          accessKey,
+          clientName,
+          skuId,
+        }, ws);
       } else if (data.type === 'abort-session') {
         // console.log('🛑 Abort session request:', data.sessionId);
         const success = abortGeminiSession(data.sessionId);

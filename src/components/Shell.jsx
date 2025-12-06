@@ -619,25 +619,16 @@ function Shell({ selectedProject, selectedSession, isActive }) {
 
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 bg-opacity-90 p-4">
-            <div className="text-center max-w-sm w-full">
-              <button
-                onClick={connectToShell}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
-                title="Connect to shell"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Continue in Shell</span>
-              </button>
-              <p className="text-zinc-400 text-sm mt-3 px-2">
-                {selectedSession ?
-                  `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
-                  'Start a new Gemini session'
-                }
-              </p>
-            </div>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <button
+              onClick={connectToShell}
+              className="pointer-events-auto w-14 h-14 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors flex items-center justify-center shadow-lg"
+              title="Connect to shell"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </button>
           </div>
         )}
 

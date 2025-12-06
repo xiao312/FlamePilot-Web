@@ -1,18 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
-import { Badge } from './ui/badge';
-import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Play, Globe, Terminal, Zap, Volume2 } from 'lucide-react';
+import { X, Settings, Moon, Sun, Terminal, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 function ToolsSettings({ isOpen, onClose }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const [allowedTools, setAllowedTools] = useState([]);
-  const [disallowedTools, setDisallowedTools] = useState([]);
-  const [newAllowedTool, setNewAllowedTool] = useState('');
-  const [newDisallowedTool, setNewDisallowedTool] = useState('');
-  const [skipPermissions, setSkipPermissions] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
@@ -41,32 +33,11 @@ function ToolsSettings({ isOpen, onClose }) {
   const [mcpConfigTested, setMcpConfigTested] = useState(false);
   const [mcpServerTools, setMcpServerTools] = useState({});
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
-  const [activeTab, setActiveTab] = useState('tools');
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
-  const [enableNotificationSound, setEnableNotificationSound] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gpt-5');
 
-  // Common tool patterns
-  const commonTools = [
-    'Bash(git log:*)',
-    'Bash(git diff:*)',
-    'Bash(git status:*)',
-    'Write',
-    'Read',
-    'Edit',
-    'Glob',
-    'Grep',
-    'MultiEdit',
-    'Task',
-    'TodoWrite',
-    'TodoRead',
-    'WebFetch',
-    'WebSearch'
-  ];
-  
   // Available Gemini models (tested and verified)
   const availableModels = [
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Fast and efficient latest model (Recommended)' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most advanced model (Note: May have quota limits)' }
+    { value: 'gpt-5', label: 'GPT-5', description: 'Current default model' }
   ];
 
   // MCP API functions
@@ -292,17 +263,12 @@ function ToolsSettings({ isOpen, onClose }) {
       
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        setAllowedTools(settings.allowedTools || []);
-        setDisallowedTools(settings.disallowedTools || []);
-        setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
-        setSelectedModel(settings.selectedModel || 'gemini-2.5-flash');
-        setEnableNotificationSound(settings.enableNotificationSound || false);
+        const storedModel = settings.selectedModel;
+        const validModel = availableModels.some(m => m.value === storedModel) ? storedModel : 'gpt-5';
+        setSelectedModel(validModel);
       } else {
         // Set defaults
-        setAllowedTools([]);
-        setDisallowedTools([]);
-        setSkipPermissions(false);
         setProjectSortOrder('name');
       }
 
@@ -311,9 +277,6 @@ function ToolsSettings({ isOpen, onClose }) {
     } catch (error) {
       // console.error('Error loading tool settings:', error);
       // Set defaults on error
-      setAllowedTools([]);
-      setDisallowedTools([]);
-      setSkipPermissions(false);
       setProjectSortOrder('name');
     }
   };
@@ -324,12 +287,8 @@ function ToolsSettings({ isOpen, onClose }) {
     
     try {
       const settings = {
-        allowedTools,
-        disallowedTools,
-        skipPermissions,
         projectSortOrder,
         selectedModel,
-        enableNotificationSound,
         lastUpdated: new Date().toISOString()
       };
       
@@ -357,28 +316,6 @@ function ToolsSettings({ isOpen, onClose }) {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const addAllowedTool = (tool) => {
-    if (tool && !allowedTools.includes(tool)) {
-      setAllowedTools([...allowedTools, tool]);
-      setNewAllowedTool('');
-    }
-  };
-
-  const removeAllowedTool = (tool) => {
-    setAllowedTools(allowedTools.filter(t => t !== tool));
-  };
-
-  const addDisallowedTool = (tool) => {
-    if (tool && !disallowedTools.includes(tool)) {
-      setDisallowedTools([...disallowedTools, tool]);
-      setNewDisallowedTool('');
-    }
-  };
-
-  const removeDisallowedTool = (tool) => {
-    setDisallowedTools(disallowedTools.filter(t => t !== tool));
   };
 
   // MCP form handling functions
@@ -549,114 +486,15 @@ function ToolsSettings({ isOpen, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Tab Navigation */}
-          <div className="border-b border-border">
-            <div className="flex px-4 md:px-6">
-              <button
-                onClick={() => setActiveTab('tools')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'tools'
-                    ? 'border-gemini-500 text-gemini-500 dark:text-gemini-400'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Tools
-              </button>
-              <button
-                onClick={() => setActiveTab('appearance')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'appearance'
-                    ? 'border-gemini-500 text-gemini-500 dark:text-gemini-400'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Appearance
-              </button>
-            </div>
-          </div>
-
           <div className="p-4 md:p-6 space-y-6 md:space-y-8 pb-safe-area-inset-bottom">
-
-            {/* Appearance Tab */}
-            {activeTab === 'appearance' && (
-              <div className="space-y-6 md:space-y-8">
-                {activeTab === 'appearance' && (
-  <div className="space-y-6 md:space-y-8">
-    {/* Theme Settings */}
-    <div className="space-y-4">
-      <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg p-4 neumorphic dark:neumorphic-dark">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Dark Mode
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Toggle between light and dark themes
-            </div>
-          </div>
-          <button
-            onClick={toggleDarkMode}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-zinc-200 dark:bg-zinc-700 transition-all duration-300 focus:outline-hidden focus:ring-2 focus:ring-gemini-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900 morph-hover"
-            role="switch"
-            aria-checked={isDarkMode}
-            aria-label="Toggle dark mode"
-          >
-            <span className="sr-only">Toggle dark mode</span>
-            <span
-              className={`${
-                isDarkMode ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 items-center justify-center`}
-            >
-              {isDarkMode ? (
-                <Moon className="w-3.5 h-3.5 text-zinc-700" />
-              ) : (
-                <Sun className="w-3.5 h-3.5 text-yellow-500" />
-              )}
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    {/* Project Sorting */}
-    <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Project Sorting
-            </div>
-            <div className="text-sm text-muted-foreground">
-              How projects are ordered in the sidebar
-            </div>
-          </div>
-          <select
-            value={projectSortOrder}
-            onChange={(e) => setProjectSortOrder(e.target.value)}
-            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-gemini-500 focus:border-gemini-500 p-2 w-32"
-          >
-            <option value="name">Alphabetical</option>
-            <option value="date">Recent Activity</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-              </div>
-            )}
-
-            {/* Tools Tab */}
-            {activeTab === 'tools' && (
-              <div className="space-y-6 md:space-y-8">
+            <div className="space-y-6 md:space-y-8">
 
             {/* Model Selection */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Zap className="w-5 h-5 text-cyan-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Gemini Model
+                  Model
                 </h3>
               </div>
               <div className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-lg p-4">
@@ -677,245 +515,78 @@ function ToolsSettings({ isOpen, onClose }) {
                   </select>
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {availableModels.find(m => m.value === selectedModel)?.description}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      More models will be available soon.
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Skip Permissions */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Permission Settings
-                </h3>
-              </div>
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                <label className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={skipPermissions}
-                    onChange={(e) => setSkipPermissions(e.target.checked)}
-                    className="w-4 h-4 text-gemini-500 bg-gray-100 border-gray-300 rounded focus:ring-gemini-500"
-                  />
-                  <div>
-                    <div className="font-medium text-orange-900 dark:text-orange-100">
-                      YOLO mode - Skip all confirmations
-                    </div>
-                    <div className="text-sm text-orange-700 dark:text-orange-300">
-                      Equivalent to --yolo flag (use with caution)
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* Notification Sound Settings */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Volume2 className="w-5 h-5 text-blue-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Notification Settings
-                </h3>
-              </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={enableNotificationSound}
-                      onChange={(e) => setEnableNotificationSound(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                    />
+            {/* Appearance */}
+            <div className="space-y-6 md:space-y-8">
+              {/* Theme Settings */}
+              <div className="space-y-4">
+                <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg p-4 neumorphic dark:neumorphic-dark">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-blue-900 dark:text-blue-100">
-                        Enable notification sound
+                      <div className="font-medium text-foreground">
+                        Dark Mode
                       </div>
-                      <div className="text-sm text-blue-700 dark:text-blue-300">
-                        Play a sound when Gemini responds
+                      <div className="text-sm text-muted-foreground">
+                        Toggle between light and dark themes
                       </div>
                     </div>
-                  </label>
-                  {enableNotificationSound && (
                     <button
-                      onClick={async () => {
-                        const { playNotificationSound } = await import('../utils/notificationSound');
-                        // Temporarily enable sound for testing
-                        const currentSettings = JSON.parse(localStorage.getItem('gemini-tools-settings') || '{}');
-                        localStorage.setItem('gemini-tools-settings', JSON.stringify({
-                          ...currentSettings,
-                          enableNotificationSound: true
-                        }));
-                        playNotificationSound();
-                        // Restore original settings
-                        localStorage.setItem('gemini-tools-settings', JSON.stringify(currentSettings));
-                      }}
-                      className="ml-7 px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                      onClick={toggleDarkMode}
+                      className="relative inline-flex h-8 w-14 items-center rounded-full bg-zinc-200 dark:bg-zinc-700 transition-all duration-300 focus:outline-hidden focus:ring-2 focus:ring-gemini-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900 morph-hover"
+                      role="switch"
+                      aria-checked={isDarkMode}
+                      aria-label="Toggle dark mode"
                     >
-                      Test Sound
+                      <span className="sr-only">Toggle dark mode</span>
+                      <span
+                        className={`${
+                          isDarkMode ? 'translate-x-7' : 'translate-x-1'
+                        } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 items-center justify-center`}
+                      >
+                        {isDarkMode ? (
+                          <Moon className="w-3.5 h-3.5 text-zinc-700" />
+                        ) : (
+                          <Sun className="w-3.5 h-3.5 text-yellow-500" />
+                        )}
+                      </span>
                     </button>
-                  )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Project Sorting */}
+              <div className="space-y-4">
+                <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-foreground">
+                        Project Sorting
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        How projects are ordered in the sidebar
+                      </div>
+                    </div>
+                    <select
+                      value={projectSortOrder}
+                      onChange={(e) => setProjectSortOrder(e.target.value)}
+                      className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-gemini-500 focus:border-gemini-500 p-2 w-32"
+                    >
+                      <option value="name">Alphabetical</option>
+                      <option value="date">Recent Activity</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Allowed Tools */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-green-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Allowed Tools
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Tools that are automatically allowed without prompting for permission
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={newAllowedTool}
-                  onChange={(e) => setNewAllowedTool(e.target.value)}
-                  placeholder='e.g., "Bash(git log:*)" or "Write"'
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addAllowedTool(newAllowedTool);
-                    }
-                  }}
-                  className="flex-1 h-10 touch-manipulation"
-                  style={{ fontSize: '16px' }}
-                />
-                <Button
-                  onClick={() => addAllowedTool(newAllowedTool)}
-                  disabled={!newAllowedTool}
-                  size="sm"
-                  className="h-10 px-4 touch-manipulation"
-                >
-                  <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
-                </Button>
-              </div>
-
-              {/* Common tools quick add */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quick add common tools:
-                </p>
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                  {commonTools.map(tool => (
-                    <Button
-                      key={tool}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => addAllowedTool(tool)}
-                      disabled={allowedTools.includes(tool)}
-                      className="text-xs h-8 touch-manipulation truncate"
-                    >
-                      {tool}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {allowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-green-800 dark:text-green-200">
-                      {tool}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeAllowedTool(tool)}
-                      className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {allowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No allowed tools configured
-                  </div>
-                )}
-              </div>
             </div>
-
-            {/* Disallowed Tools */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Disallowed Tools
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Tools that are automatically blocked without prompting for permission
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={newDisallowedTool}
-                  onChange={(e) => setNewDisallowedTool(e.target.value)}
-                  placeholder='e.g., "Bash(rm:*)" or "Write"'
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addDisallowedTool(newDisallowedTool);
-                    }
-                  }}
-                  className="flex-1 h-10 touch-manipulation"
-                  style={{ fontSize: '16px' }}
-                />
-                <Button
-                  onClick={() => addDisallowedTool(newDisallowedTool)}
-                  disabled={!newDisallowedTool}
-                  size="sm"
-                  className="h-10 px-4 touch-manipulation"
-                >
-                  <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {disallowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-red-800 dark:text-red-200">
-                      {tool}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeDisallowedTool(tool)}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {disallowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No disallowed tools configured
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Help Section */}
-            <div className="bg-gemini-50 dark:bg-gemini-900/20 border border-gemini-200 dark:border-gemini-800 rounded-lg p-4">
-              <h4 className="font-medium text-gemini-900 dark:text-gemini-100 mb-2">
-                Tool Pattern Examples:
-              </h4>
-              <ul className="text-sm text-gemini-800 dark:text-gemini-200 space-y-1">
-                <li><code className="bg-gemini-100 dark:bg-gemini-800 px-1 rounded">&quot;Bash(git log:*)&quot;</code> - Allow all git log commands</li>
-                <li><code className="bg-gemini-100 dark:bg-gemini-800 px-1 rounded">&quot;Bash(git diff:*)&quot;</code> - Allow all git diff commands</li>
-                <li><code className="bg-gemini-100 dark:bg-gemini-800 px-1 rounded">&quot;Write&quot;</code> - Allow all Write tool usage</li>
-                <li><code className="bg-gemini-100 dark:bg-gemini-800 px-1 rounded">&quot;Read&quot;</code> - Allow all Read tool usage</li>
-                <li><code className="bg-gemini-100 dark:bg-gemini-800 px-1 rounded">&quot;Bash(rm:*)&quot;</code> - Block all rm commands (dangerous)</li>
-              </ul>
-            </div>
-
-              </div>
-            )}
           </div>
         </div>
 
@@ -943,7 +614,7 @@ function ToolsSettings({ isOpen, onClose }) {
               variant="outline" 
               onClick={onClose} 
               disabled={isSaving}
-              className="flex-1 sm:flex-none h-10 touch-manipulation"
+              className="flex-1 sm:flex-none h-10 touch-manipulation text-foreground"
             >
               Cancel
             </Button>

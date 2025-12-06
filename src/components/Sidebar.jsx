@@ -437,8 +437,8 @@ function Sidebar({
               <MessageSquare className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">Gemini CLI UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              <h1 className="text-lg font-bold text-foreground">FlamePilot Web</h1>
+              <p className="text-sm text-muted-foreground">AI CFD assistant interface</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -479,7 +479,7 @@ function Sidebar({
                 <MessageSquare className="w-4 h-4 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Gemini CLI UI</h1>
+                <h1 className="text-lg font-semibold text-foreground">FlamePilot Web</h1>
                 <p className="text-sm text-muted-foreground">Projects</p>
               </div>
             </div>
@@ -1258,49 +1258,7 @@ function Sidebar({
         </div>
       </ScrollArea>
       
-      {/* Version Update Notification */}
-      {updateAvailable && (
-        <div className="md:p-2 border-t border-border/50 flex-shrink-0">
-          {/* Desktop Version Notification */}
-          <div className="hidden md:block">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 p-3 h-auto font-normal text-left hover:bg-gemini-50 dark:hover:bg-gemini-900/20 transition-colors duration-200 border border-gemini-200 dark:border-gemini-700 rounded-lg mb-2"
-              onClick={onShowVersionModal}
-            >
-              <div className="relative">
-                <svg className="w-4 h-4 text-gemini-600 dark:text-gemini-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-gemini-500 rounded-full animate-pulse" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-gemini-700 dark:text-gemini-300">Update Available</div>
-                <div className="text-xs text-gemini-600 dark:text-gemini-400">Version {latestVersion} is ready</div>
-              </div>
-            </Button>
-          </div>
-          
-          {/* Mobile Version Notification */}
-          <div className="md:hidden p-3 pb-2">
-            <button
-              className="w-full h-12 bg-gemini-50 dark:bg-gemini-900/20 border border-gemini-200 dark:border-gemini-700 rounded-xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
-              onClick={onShowVersionModal}
-            >
-              <div className="relative">
-                <svg className="w-5 h-5 text-gemini-600 dark:text-gemini-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-gemini-500 rounded-full animate-pulse" />
-              </div>
-              <div className="min-w-0 flex-1 text-left">
-                <div className="text-sm font-medium text-gemini-700 dark:text-gemini-300">Update Available</div>
-                <div className="text-xs text-gemini-600 dark:text-gemini-400">Version {latestVersion} is ready</div>
-              </div>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Version Update Notification intentionally removed */}
       
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
@@ -1324,7 +1282,7 @@ function Sidebar({
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />
-          <span className="text-xs">Tools Settings</span>
+          <span className="text-xs">Settings</span>
         </Button>
       </div>
     </div>
