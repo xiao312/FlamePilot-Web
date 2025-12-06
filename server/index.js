@@ -130,6 +130,35 @@ async function setupProjectsWatcher() {
 const app = express();
 const server = http.createServer(app);
 
+// Log photon billing configuration on startup
+const logPhotonConfig = () => {
+  const isDevMode = process.env.PHOTON_DEV_MODE === '1';
+  const isMock = process.env.PHOTON_MOCK === '1';
+  const whitelist = (process.env.PHOTON_WHITELIST_ACCESS_KEYS || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+  const devAccessKeySet = Boolean(process.env.DEV_ACCESS_KEY);
+  const clientNameSet = Boolean(process.env.CLIENT_NAME);
+  const skuIdSet = Boolean(process.env.SKU_ID);
+  const photonSkuSet = Boolean(process.env.PHOTON_SKU_ID);
+  const billingEnabled = !isMock && (isDevMode ? (devAccessKeySet && clientNameSet && skuIdSet) : false);
+  const whitelistActive = whitelist.length > 0;
+  const whitelistPreview = whitelist.map(k => k ? `***${k.slice(-4)}` : k);
+  console.log('[Photon] Startup config:', {
+    PHOTON_DEV_MODE: process.env.PHOTON_DEV_MODE,
+    PHOTON_MOCK: process.env.PHOTON_MOCK,
+    DEV_ACCESS_KEY_SET: devAccessKeySet,
+    CLIENT_NAME_SET: clientNameSet,
+    SKU_ID_SET: skuIdSet,
+    PHOTON_SKU_ID_SET: photonSkuSet,
+    whitelist: whitelistPreview,
+    mode: isMock ? 'mock' : (isDevMode ? 'dev' : 'prod'),
+    billingEnabled,
+    whitelistActive,
+  });
+};
+
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
   server,
@@ -920,6 +949,7 @@ async function startServer() {
   try {
     // Initialize authentication database
     await initializeDatabase();
+    logPhotonConfig();
     // console.log('✅ Database initialization skipped (testing)');
     server.listen(PORT, '0.0.0.0', async () => {
       // console.log(`Gemini CLI UI server running on http://0.0.0.0:${PORT}`);

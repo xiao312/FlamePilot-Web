@@ -1108,6 +1108,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [geminiStatus, setGeminiStatus] = useState(null);
+  const lastProcessedMessageRef = useRef(0);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      lastProcessedMessageRef.current = 0;
+    }
+  }, [messages.length]);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1454,9 +1461,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, []);
 
   useEffect(() => {
-    // Handle WebSocket messages
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
+    // Handle WebSocket messages in order to avoid dropping batched frames
+    for (let idx = lastProcessedMessageRef.current; idx < messages.length; idx++) {
+      const latestMessage = messages[idx];
+      lastProcessedMessageRef.current = idx + 1;
       console.log('Received WebSocket message:', latestMessage.type, latestMessage);
 
       switch (latestMessage.type) {
@@ -1652,24 +1660,28 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
            }]);
            break;
 
-         case 'photon-charge':
-           if (latestMessage.error) {
-             console.warn('Photon error:', latestMessage.error);
-             // Show warning: Photon not charged or failed
-             setChatMessages(prev => [...prev, {
-               type: 'system',
-               content: `⚠️ Photon billing issue: ${latestMessage.error}`,
-               timestamp: new Date()
-             }]);
-           } else {
-             const { photonsCharged, tokensUsed, price, chargeResponse } = latestMessage.data;
-             const code = chargeResponse && chargeResponse.code;
-             console.log('Photon charged:', photonsCharged, 'tokens:', tokensUsed, 'resp:', chargeResponse);
+        case 'photon-charge':
+          if (latestMessage.error) {
+            console.warn('Photon error:', latestMessage.error);
+            // Show warning: Photon not charged or failed
+            setChatMessages(prev => [...prev, {
+              type: 'system',
+              content: `⚠️ Photon billing issue: ${latestMessage.error}`,
+              timestamp: new Date()
+            }]);
+          } else {
+            const { photonsCharged, tokensUsed, price, chargeResponse, reason } = latestMessage.data;
+            const code = chargeResponse && chargeResponse.code;
+            console.log('Photon charged:', photonsCharged, 'tokens:', tokensUsed, 'resp:', chargeResponse);
 
-            if (code === 0) {
+           if (code === 0) {
+              const perMessage = price?.perMessage ?? 3;
+              const per1kTokens = price?.per1kTokens ?? 3;
+              const reasonLabel = reason ? ` (${reason})` : '';
+              const tokenLabel = typeof tokensUsed === 'number' && tokensUsed > 0 ? `${tokensUsed} tokens` : 'message';
               setChatMessages(prev => [...prev, {
                 type: 'system',
-                content: `This conversation used ${tokensUsed} tokens and charged ${photonsCharged} photons (${price.perQuery} photons/request + ${price.per1kTokens} photons per 1k tokens).`,
+                content: `Photon charge${reasonLabel}: +${photonsCharged} photons for ${tokenLabel}. Rates: ${perMessage}/message, ${per1kTokens}/1k tokens.`,
                 timestamp: new Date()
               }]);
             } else {
@@ -2556,6 +2568,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
             Enter to send • Tab for modes
+          </div>
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-2">
+            Photon billing: 3 photons per message + 3 photons per 1k tokens (rounded up).
           </div>
         </form>
       </div>

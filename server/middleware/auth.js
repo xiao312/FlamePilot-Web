@@ -20,30 +20,30 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  console.log('authenticateToken called for', req.path);
+  // console.log('authenticateToken called for', req.path);
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (!token) {
-    console.log('No token provided');
+    // console.log('No token provided');
     return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
 
   try {
-    console.log('Verifying token');
+    // console.log('Verifying token');
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('Token decoded:', decoded);
+    // console.log('Token decoded:', decoded);
 
     // Verify user still exists and is active
-    console.log('Getting user by id:', decoded.userId);
+    // console.log('Getting user by id:', decoded.userId);
     const user = userDb.getUserById(decoded.userId);
-    console.log('User found:', !!user);
+    // console.log('User found:', !!user);
     if (!user) {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
     req.user = user;
-    console.log('Authentication successful');
+    // console.log('Authentication successful');
     next();
   } catch (error) {
     console.error('Token verification error:', error);

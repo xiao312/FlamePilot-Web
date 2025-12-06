@@ -6,20 +6,27 @@ import sessionManager from './sessionManager.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
-function computePhotonCharge(totalTokens) {
-  const basePerQuery = 3;
-  const per1kTokens = 3;
+const PER_MESSAGE_PHOTONS = 0; // Flat cost per user message
 
-  const tokenBlocks = Math.ceil((totalTokens || 0) / 1000);
-  return basePerQuery + tokenBlocks * per1kTokens;
-  // e.g. totalTokens = 6089 -> 3 + ceil(6.089)*3 = 3 + 6*3 = 21 photons
+function computePhotonChargeForTokens(deltaTokens) {
+  // Rate: 3 photons per 1k tokens; round up to whole photons
+  const ratePerToken = 0 / 1000;
+  const raw = (deltaTokens || 0) * ratePerToken;
+  return Math.ceil(raw);
 }
 
 async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
+  const numericSkuId = Number(skuId);
+
   // Dev mode mocking: don't hit real API
   if (process.env.PHOTON_DEV_MODE === '1' && process.env.PHOTON_MOCK === '1') {
-    console.log(`[DEV-MOCK] Would charge ${eventValue} photons (skuId=${skuId})`);
+    console.log(`[DEV-MOCK] Would charge ${eventValue} photons (skuId=${numericSkuId})`);
     return { statusCode: 200, body: { code: 0, mock: true } };
+  }
+
+  // Basic validation: ensure we have reasonable inputs
+  if (!accessKey || !clientName || !Number.isFinite(numericSkuId) || numericSkuId <= 0 || typeof eventValue !== 'number' || eventValue < 0) {
+    throw new Error('Photon charge missing required fields or invalid eventValue');
   }
 
   const url = 'https://openapi.dp.tech/openapi/v1/api/integral/consume';
@@ -34,22 +41,38 @@ async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
     'x-app-key': clientName,       // corresponds to CLIENT_NAME
     'Content-Type': 'application/json',
     'Accept': '*/*',
+    'User-Agent': 'FlamePilot-Web/1.0',
+    'Connection': 'keep-alive',
   };
 
   const payload = {
     bizNo,
     changeType: 1,
     eventValue,                    // photon amount to deduct
-    skuId,                         // each app has a unique skuId
+    skuId: numericSkuId,           // each app has a unique skuId
     scene: 'appCustomizeCharge',
   };
+  // Debug (mask secrets): log payload and headers (masked)
+  console.log('[Photon] Request payload:', {
+    bizNo,
+    changeType: payload.changeType,
+    eventValue: payload.eventValue,
+    skuId: payload.skuId,
+    skuIdType: typeof payload.skuId,
+    scene: payload.scene,
+    accessKeySet: Boolean(accessKey),
+    clientNameSet: Boolean(clientName),
+  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
 
   const res = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
-    // timeout: 10_000, // fetch doesn't have timeout, maybe use AbortController
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   let data;
   try {
@@ -69,7 +92,131 @@ async function spawnGemini(command, options = {}, ws) {
      let sessionCreatedSent = false; // Track if we've already sent session-created event
      let assistantResponse = ''; // Accumulate assistant response from JSON
      let lastTokenCount = 0;   // Track last token usage
+     let billedTokenCount = 0; // Track tokens already billed
+     let geminiProcess; // Will hold the spawned process reference for fatal billing failures
     
+    // Dev mode: use env vars; Prod mode: use options from cookies
+    const isDevMode = process.env.PHOTON_DEV_MODE === '1';
+    const isMock = process.env.PHOTON_MOCK === '1';
+    const accessKey = isDevMode ? (process.env.DEV_ACCESS_KEY || options.accessKey) : options.accessKey;
+    const clientName = isDevMode ? (process.env.CLIENT_NAME || options.clientName) : options.clientName;
+    const rawSku = isDevMode ? (process.env.SKU_ID || options.skuId) : options.skuId;
+    const skuId = Number(rawSku);
+
+    const hasValidCredentials = Boolean(
+      accessKey &&
+      clientName &&
+      Number.isFinite(skuId) &&
+      skuId > 0 &&
+      skuId !== 'your-app-sku-id'
+    );
+    const cleanAccessKey = accessKey && accessKey.trim();
+    const whitelistAccessKeys = new Set(
+      (process.env.PHOTON_WHITELIST_ACCESS_KEYS || '')
+        .split(',')
+        .map(v => v.trim())
+        .filter(Boolean)
+    );
+    const isWhitelisted = cleanAccessKey && whitelistAccessKeys.has(cleanAccessKey);
+    const billingEnabledFlag = !isMock && hasValidCredentials;
+
+    console.log('[Photon] Session billing config:', {
+      isDevMode,
+      hasValidCredentials,
+      isWhitelisted,
+      skuId,
+      clientNameSet: Boolean(clientName),
+      accessKeySet: Boolean(accessKey),
+      accessKeyTail: cleanAccessKey ? cleanAccessKey.slice(-6) : null,
+      billingEnabledFlag,
+      willBill: billingEnabledFlag && !isWhitelisted,
+      whitelistCount: whitelistAccessKeys.size,
+    });
+
+    const billPhotons = async ({ photons, tokensUsed, reason }) => {
+      if (!billingEnabledFlag) {
+        console.log('[Photon] Billing disabled by config.', { reason });
+        return;
+      }
+      if (isWhitelisted) {
+        console.log('[Photon] Billing skipped (whitelist).', { reason, isWhitelisted });
+        return;
+      }
+      if (!hasValidCredentials || !ws) {
+        console.warn('[Photon] Skipping charge due to missing/invalid credentials', { hasValidCredentials, skuId });
+        return;
+      }
+      if (typeof photons !== 'number' || photons < 0) {
+        console.log('[Photon] Skipping charge due to invalid photons', { photons, reason });
+        return;
+      }
+
+      try {
+        console.log(`[Photon] ${reason} charge attempt: photons=${photons} tokens=${tokensUsed} skuId=${skuId} devMode=${isDevMode}`);
+        const chargeResult = await chargePhotons({
+          accessKey,
+          clientName,
+          skuId,
+          eventValue: photons,
+        });
+        const respBody = chargeResult.body || chargeResult;
+        const code = respBody && typeof respBody.code === 'number' ? respBody.code : undefined;
+        console.log('[Photon] Charge response:', JSON.stringify(respBody));
+
+        if (code !== undefined && code !== 0) {
+          throw new Error(`Photon charge returned code=${code}`);
+        }
+
+        ws.send(JSON.stringify({
+          type: 'photon-charge',
+          data: {
+            photonsCharged: photons,
+            tokensUsed: tokensUsed,
+            price: {
+              perMessage: PER_MESSAGE_PHOTONS,
+              per1kTokens: 3,
+            },
+            chargeResponse: respBody,
+            reason,
+          },
+        }));
+      } catch (err) {
+        console.error(`[Photon] ${reason} charge failed:`, err);
+        ws.send(JSON.stringify({
+          type: 'photon-charge',
+          error: `Photon charging failed (${reason})`,
+          tokensUsed,
+        }));
+        if (geminiProcess && typeof geminiProcess.kill === 'function') {
+          console.error('[Photon] Killing Gemini process due to billing failure');
+          try { geminiProcess.kill('SIGTERM'); } catch {}
+        }
+        // Notify chat flow that billing failed so UI can stop loading
+        try {
+          ws.send(JSON.stringify({
+            type: 'gemini-error',
+            error: `Photon billing failed (${reason})`,
+          }));
+        } catch {}
+        throw err;
+      }
+    };
+
+    // Charge per message as soon as we accept the command
+    try {
+      await billPhotons({ photons: PER_MESSAGE_PHOTONS, tokensUsed: 0, reason: 'per-message' });
+    } catch (err) {
+      console.error('[Photon] per-message charge error, aborting spawn:', err);
+      // Ensure UI gets an error and the promise rejects
+      try {
+        ws.send(JSON.stringify({
+          type: 'gemini-error',
+          error: 'Photon billing failed (per-message)',
+        }));
+      } catch {}
+      return reject(err);
+    }
+
     // Process images if provided
     
     // Use tools settings passed from frontend, or defaults
@@ -260,7 +407,7 @@ async function spawnGemini(command, options = {}, ws) {
 
     const fullCommand = `cd "${workingDir}" && ${geminiPath} web -m "${promptToUse}"`;
     console.log('Executing command:', fullCommand);
-    const geminiProcess = spawn('bash', ['-c', fullCommand], {
+    geminiProcess = spawn('bash', ['-c', fullCommand], {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
@@ -302,7 +449,7 @@ async function spawnGemini(command, options = {}, ws) {
     
     // Handle stdout (outputs JSON lines)
     
-    geminiProcess.stdout.on('data', (data) => {
+    geminiProcess.stdout.on('data', async (data) => {
       const rawOutput = data.toString();
       console.log('Raw stdout:', rawOutput);
       // hasReceivedOutput = true;
@@ -335,6 +482,16 @@ async function spawnGemini(command, options = {}, ws) {
             const usage = parsed.data && parsed.data.usage;
             if (usage && typeof usage.total_token_count === 'number') {
               lastTokenCount = usage.total_token_count;
+              const deltaTokens = lastTokenCount - billedTokenCount;
+              if (deltaTokens > 0) {
+                const photons = computePhotonChargeForTokens(deltaTokens);
+                try {
+                  await billPhotons({ photons, tokensUsed: deltaTokens, reason: 'token-delta' });
+                } catch (err) {
+                  console.error('[Photon] token-delta charge error (continuing):', err);
+                }
+                billedTokenCount = lastTokenCount;
+              }
             }
 
             // Accumulate content for session saving
@@ -419,51 +576,20 @@ async function spawnGemini(command, options = {}, ws) {
         sessionManager.addMessage(finalSessionId, 'assistant', assistantResponse.trim());
       }
 
-      // --- Photon charging begins here ---
+      // --- Photon charging (final delta) ---
       try {
-        // Dev mode: use env vars; Prod mode: use options from cookies
-        const isDevMode = process.env.PHOTON_DEV_MODE === '1';
-        const accessKey = isDevMode ? (options.accessKey || process.env.DEV_ACCESS_KEY) : options.accessKey;
-        const clientName = isDevMode ? (options.clientName || process.env.CLIENT_NAME) : options.clientName;
-        const skuId = isDevMode ? (options.skuId || Number(process.env.SKU_ID)) : options.skuId;
-
-        if (accessKey && clientName && skuId && lastTokenCount >= 0) {
-          const photons = computePhotonCharge(lastTokenCount);
-          const chargeResult = await chargePhotons({
-            accessKey,
-            clientName,
-            skuId,
-            eventValue: photons,
-          });
-
-          // Notify frontend about the charge
-          ws.send(JSON.stringify({
-            type: 'photon-charge',
-            data: {
-              photonsCharged: photons,
-              tokensUsed: lastTokenCount,
-              price: {
-                perQuery: 3,
-                per1kTokens: 3,
-              },
-              chargeResponse: chargeResult.body, // { code: 0, ... } or error
-            },
-          }));
-        } else {
-          // If missing info, send a warning to frontend (but don't crash)
-          ws.send(JSON.stringify({
-            type: 'photon-charge',
-            error: 'Missing accessKey/clientName/skuId; Photon not charged',
-            tokensUsed: lastTokenCount,
-          }));
+        const remainingTokens = Math.max(0, lastTokenCount - billedTokenCount);
+        if (remainingTokens > 0) {
+          const photons = computePhotonChargeForTokens(remainingTokens);
+          try {
+            await billPhotons({ photons, tokensUsed: remainingTokens, reason: 'token-final' });
+          } catch (err) {
+            console.error('[Photon] token-final charge error (continuing):', err);
+          }
+          billedTokenCount = lastTokenCount;
         }
       } catch (err) {
-        console.error('Photon charge failed:', err);
-        ws.send(JSON.stringify({
-          type: 'photon-charge',
-          error: 'Photon charging failed',
-          tokensUsed: lastTokenCount,
-        }));
+        console.error('[Photon] Final token charge failed:', err);
       }
       // --- Photon charging end ---
 
