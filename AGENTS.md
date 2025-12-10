@@ -31,6 +31,7 @@
 - Write clear commits in present tense (e.g., `Add shell sandbox guard`, `Fix chat placeholder text`).
 - For PRs: describe scope, testing performed, and any config/env changes; add screenshots for UI tweaks.
 - Avoid formatting-only PRs; group related changes and keep diffs small when possible.
+- When crafting commit messages, prefer the existing prefixes in this repo history (`feat:`, `fix:`, `chore:`). Summarize the primary change in a short imperative/present-tense phrase (e.g., `fix: harden per-user paths and shell streaming`). Keep it one line, focused on the most important behavior change.
 
 ## Security & Configuration Tips
 - Copy `.env.example` to `.env`; set `PORT`, `VITE_PORT`, `JWT_SECRET`, optional `GEMINI_PATH`.

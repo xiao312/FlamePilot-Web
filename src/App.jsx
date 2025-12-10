@@ -70,13 +70,30 @@ function AppContent() {
     document.title = 'FlamePilot Web';
   }, []);
 
-  // Derive user avatar label from cookies (prod: appAccessKey, dev: DEV_ACCESS_KEY)
+  // Derive user avatar label from Bohrium user-info (preferred) or cookies (fallback)
   useEffect(() => {
     const maskKey = (value) => {
       if (!value) return null;
       const trimmed = value.trim();
       if (!trimmed) return null;
       return trimmed.length <= 4 ? `***${trimmed}` : `***${trimmed.slice(-4)}`;
+    };
+
+    const parseBohriumUser = () => {
+      try {
+        const raw = localStorage.getItem('user-info');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed) return null;
+        const name = parsed.userName || parsed.userNameEn || parsed.email;
+        const label = name || parsed.email || parsed.userId || parsed.userNo;
+        if (!label) return null;
+        const initialsSource = (name || parsed.email || '').trim();
+        const initials = (initialsSource.slice(0, 2) || 'GU').toUpperCase();
+        return { label, initials };
+      } catch {
+        return null;
+      }
     };
 
     const parseCookies = () => {
@@ -89,6 +106,12 @@ function AppContent() {
         });
       return Object.fromEntries(entries);
     };
+
+    const bohrUser = parseBohriumUser();
+    if (bohrUser) {
+      setUserBadge(bohrUser);
+      return;
+    }
 
     const cookies = parseCookies();
     const accessKey = cookies.appAccessKey || cookies.accessKey || cookies.DEV_ACCESS_KEY;

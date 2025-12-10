@@ -124,7 +124,14 @@ async function spawnGemini(command, options = {}, ws) {
         .map(v => v.trim())
         .filter(Boolean)
     );
-    const isWhitelisted = cleanAccessKey && whitelistAccessKeys.has(cleanAccessKey);
+    const whitelistUsers = new Set(
+      (process.env.PHOTON_WHITELIST_USERS || '')
+        .split(',')
+        .map(v => v.trim())
+        .filter(Boolean)
+    );
+    const isWhitelisted = (cleanAccessKey && whitelistAccessKeys.has(cleanAccessKey)) ||
+      (options.user && (whitelistUsers.has(String(options.user.userId || options.user.uid || options.user.username)) || whitelistUsers.has(options.user.username)));
     // Bill for every user when credentials are present; skip only in explicit mock mode
     const billingEnabledFlag = hasValidCredentials && !isMock;
     const shouldBill = billingEnabledFlag && !isWhitelisted;

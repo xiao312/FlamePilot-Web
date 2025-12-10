@@ -38,9 +38,14 @@ export const AuthProvider = ({ children }) => {
       const raw = localStorage.getItem('user-info');
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.userNo) return null;
-      const uid = String(parsed.userNo);
-      const name = parsed.userName || parsed.userNameEn || uid;
+      if (!parsed) return null;
+      // Prefer stable identifiers: userId (numeric) > email > userNo > userName
+      const uid = parsed.userId ? String(parsed.userId) :
+                  parsed.email ? String(parsed.email) :
+                  parsed.userNo ? String(parsed.userNo) :
+                  parsed.userName || null;
+      if (!uid) return null;
+      const name = parsed.userName || parsed.userNameEn || parsed.email || uid;
       const email = parsed.email || parsed.gitLoginName || '';
       console.info('[Auth] Bohrium user detected', { uid, name, email: Boolean(email) });
       return { uid, name, email };
