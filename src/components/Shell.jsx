@@ -203,7 +203,10 @@ function Shell({ selectedProject, selectedSession, isActive }) {
     terminal.current = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: 'Cascadia Mono, "Fira Code", Menlo, Monaco, "Courier New", monospace',
+      lineHeight: 1.2, // avoid clipping low glyphs like underscores
+      fontWeight: '400',
+      fontWeightBold: '600',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
       convertEol: true,
@@ -641,7 +644,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 <span className="text-base font-medium">Connecting to shell...</span>
               </div>
               <p className="text-zinc-400 text-sm mt-3 px-2">
-                Starting Gemini CLI in {selectedProject.displayName}
+                Opening FlamePilot shell in {selectedProject.displayName}
               </p>
             </div>
           </div>

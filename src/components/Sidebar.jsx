@@ -71,6 +71,7 @@ function Sidebar({
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
   const [newProjectPath, setNewProjectPath] = useState('');
+  const [shellRoot, setShellRoot] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState({});
   const [additionalSessions, setAdditionalSessions] = useState({});
@@ -115,6 +116,36 @@ function Sidebar({
 
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch config so we can prefill the new project path with SHELL_ROOT
+  useEffect(() => {
+    let isMounted = true;
+    const loadConfig = async () => {
+      try {
+        const response = await api.config();
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        if (isMounted && data.shellRoot) {
+          setShellRoot(data.shellRoot);
+        }
+      } catch (error) {
+        console.error('Error fetching config:', error);
+      }
+    };
+    loadConfig();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Prefill new project path when the form opens and SHELL_ROOT is available
+  useEffect(() => {
+    if (showNewProject && shellRoot && !newProjectPath.trim()) {
+      setNewProjectPath(shellRoot);
+    }
+  }, [showNewProject, shellRoot, newProjectPath]);
 
   // Clear additional sessions when projects list changes (e.g., after refresh)
   useEffect(() => {
@@ -431,17 +462,26 @@ function Sidebar({
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
-        <div className="hidden md:flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-layered glow-sidebar">
-              <MessageSquare className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">FlamePilot Web</h1>
-              <p className="text-sm text-muted-foreground">AI CFD assistant interface</p>
-            </div>
+        <div className="hidden md:flex items-center justify-between gap-3">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+            />
+            {searchFilter && (
+              <button
+                onClick={() => setSearchFilter('')}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+              >
+                <X className="w-3 h-3 text-muted-foreground" />
+              </button>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Button
               variant="ghost"
               size="sm"
@@ -479,8 +519,7 @@ function Sidebar({
                 <MessageSquare className="w-4 h-4 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">FlamePilot Web</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
+                <h1 className="text-lg font-semibold text-foreground">Projects</h1>
               </div>
             </div>
             <div className="flex gap-2">
@@ -522,7 +561,7 @@ function Sidebar({
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
               placeholder="/path/to/project or relative/path"
-              className="text-sm focus:ring-2 focus:ring-primary/20"
+              className="text-sm focus:ring-2 focus:ring-primary/20 bg-background text-foreground"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -547,7 +586,7 @@ function Sidebar({
                 variant="outline"
                 onClick={cancelNewProject}
                 disabled={creatingProject}
-                className="h-8 text-xs hover:bg-accent transition-colors"
+                className="h-8 text-xs hover:bg-accent transition-colors text-foreground"
               >
                 Cancel
               </Button>
@@ -580,7 +619,7 @@ function Sidebar({
                   value={newProjectPath}
                   onChange={(e) => setNewProjectPath(e.target.value)}
                   placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-md focus:border-primary transition-colors"
+                  className="text-sm h-10 rounded-md focus:border-primary transition-colors bg-card text-foreground"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -620,7 +659,7 @@ function Sidebar({
 
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border">
+        <div className="px-3 md:px-4 py-2 border-b border-border md:hidden">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -662,7 +701,7 @@ function Sidebar({
               </div>
               <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
               <p className="text-sm text-muted-foreground">
-                Run Gemini CLI in a project directory to get started
+                Run FlamePilot CLI in a project directory to get started
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (

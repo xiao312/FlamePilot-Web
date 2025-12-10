@@ -45,6 +45,7 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { getShellRoot, isPathWithinShellRoot, assertPathWithinShellRoot, ensureShellRootExists } from './pathGuard.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -145,7 +146,8 @@ const logPhotonConfig = () => {
   const billingEnabled = !isMock && (isDevMode ? (devAccessKeySet && clientNameSet && skuIdSet) : false);
   const whitelistActive = whitelist.length > 0;
   const whitelistPreview = whitelist.map(k => k ? `***${k.slice(-4)}` : k);
-  console.log('[Photon] Startup config:', {
+  logger.info('[Photon] Startup config', {
+    action: 'photon_startup',
     PHOTON_DEV_MODE: process.env.PHOTON_DEV_MODE,
     PHOTON_MOCK: process.env.PHOTON_MOCK,
     DEV_ACCESS_KEY_SET: devAccessKeySet,
@@ -184,6 +186,10 @@ const wss = new WebSocketServer({
 // WebSocket heartbeat to detect dead connections
 function heartbeat() {
   this.isAlive = true;
+}
+
+function respondWithGuardError(res, error) {
+  return res.status(error.statusCode || error.status || 403).json({ error: error.message });
 }
 
 const wsPingInterval = setInterval(() => {
@@ -227,15 +233,21 @@ app.get('/api/config', authenticateToken, (req, res) => {
 
   res.json({
     serverPort: PORT,
-    wsUrl: `${protocol}://${host}`
+    wsUrl: `${protocol}://${host}`,
+    shellRoot: getShellRoot()
   });
 });
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
     const projects = await getProjects();
-    res.json(projects);
+    const root = getShellRoot();
+    const filteredProjects = root ? projects.filter(p => p.path && isPathWithinShellRoot(p.path)) : projects;
+    res.json(filteredProjects);
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return respondWithGuardError(res, error);
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -244,6 +256,12 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
   try {
     // Extract the actual project directory path
     const projectPath = await extractProjectDirectory(req.params.projectName);
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(projectPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     // Get sessions from sessionManager
     const sessions = sessionManager.getProjectSessions(projectPath);
     // Apply pagination
@@ -273,6 +291,13 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
 app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
   try {
     const { displayName } = req.body;
+    try {
+      const projectPath = await extractProjectDirectory(req.params.projectName);
+      ensureShellRootExists();
+      assertPathWithinShellRoot(projectPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     await renameProject(req.params.projectName, displayName);
     res.json({ success: true });
   } catch (error) {
@@ -295,6 +320,13 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
+    try {
+      const projectPath = await extractProjectDirectory(projectName);
+      ensureShellRootExists();
+      assertPathWithinShellRoot(projectPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     await deleteProject(projectName);
     res.json({ success: true });
   } catch (error) {
@@ -309,7 +341,14 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     if (!projectPath || !projectPath.trim()) {
       return res.status(400).json({ error: 'Project path is required' });
     }
-    const project = await addProjectManually(projectPath.trim());
+    const resolvedPath = path.resolve(projectPath.trim());
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(resolvedPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
+    const project = await addProjectManually(resolvedPath);
     res.json({ success: true, project });
   } catch (error) {
     // console.error('Error creating project:', error);
@@ -327,6 +366,12 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
+    }
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(filePath, 'File path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
     }
     const content = await fsPromises.readFile(filePath, 'utf8');
     res.json({ content, path: filePath });
@@ -353,6 +398,12 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
+    }
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(filePath, 'File path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
     }
     // Check if file exists
     try {
@@ -390,6 +441,12 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
+    }
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(filePath, 'File path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
     }
     if (content === undefined) {
       return res.status(400).json({ error: 'Content is required' });
@@ -433,6 +490,12 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
       // Fallback to simple dash replacement
       actualPath = req.params.projectName.replace(/-/g, '/');
     }
+    try {
+      ensureShellRootExists();
+      assertPathWithinShellRoot(actualPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     // Check if path exists
     try {
       await fsPromises.access(actualPath);
@@ -472,6 +535,7 @@ function handleChatConnection(ws, request) {
   // console.log('💬 Chat WebSocket connected');
   // Add to connected clients for project updates
   connectedClients.add(ws);
+  const wsUser = request.user || null;
 
   // Extract cookies for Photon charging
   function parseCookies(cookieHeader) {
@@ -503,6 +567,7 @@ function handleChatConnection(ws, request) {
           accessKey,
           clientName,
           skuId,
+          user: wsUser,
         }, ws);
       } else if (data.type === 'abort-session') {
         // console.log('🛑 Abort session request:', data.sessionId);
@@ -532,13 +597,88 @@ function handleChatConnection(ws, request) {
 function handleShellConnection(ws) {
   // console.log('🐚 Shell client connected');
   let shellProcess = null;
+  let currentShellCwd = null;
+  let inputBuffer = '';
+
+  const shellRoot = getShellRoot();
+
+  const resolveWithinRoot = (targetPath) => {
+    const resolved = path.resolve(currentShellCwd || shellRoot || process.cwd(), targetPath);
+    return resolved;
+  };
+
+  const isPathAllowed = (targetPath) => {
+    try {
+      assertPathWithinShellRoot(targetPath, 'Shell path');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const validateCommand = (command) => {
+    if (!shellRoot) return { allowed: true };
+    const trimmed = command.trim();
+    if (!trimmed) return { allowed: true };
+
+    // Basic parsing: split by whitespace while respecting simple quotes
+    const tokens = trimmed.match(/(?:[^\s"']+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+/g) || [];
+    if (tokens.length === 0) return { allowed: true };
+
+    // Handle explicit cd commands to keep cwd inside root
+    if (tokens[0] === 'cd') {
+      const target = tokens[1] || shellRoot;
+      // Disallow cd -
+      if (target === '-') {
+        return { allowed: false, message: `cd - is not allowed under SHELL_ROOT (${shellRoot})` };
+      }
+      const resolved = path.isAbsolute(target) ? path.resolve(target) : resolveWithinRoot(target);
+      if (!isPathWithinShellRoot(resolved)) {
+        return { allowed: false, message: `Path not allowed. Stay within SHELL_ROOT (${shellRoot})` };
+      }
+      return { allowed: true, nextCwd: resolved };
+    }
+
+    // For other commands, block obvious absolute paths outside root
+    for (const token of tokens) {
+      // Skip flags
+      if (token.startsWith('-')) continue;
+      // Strip quotes
+      const clean = token.replace(/^['"]|['"]$/g, '');
+      if (path.isAbsolute(clean)) {
+        if (!isPathWithinShellRoot(clean)) {
+          return { allowed: false, message: `Access outside SHELL_ROOT is blocked (${shellRoot})` };
+        }
+      } else if (clean.includes('..') || clean.includes('/')) {
+        const resolved = resolveWithinRoot(clean);
+        if (!isPathWithinShellRoot(resolved)) {
+          return { allowed: false, message: `Access outside SHELL_ROOT is blocked (${shellRoot})` };
+        }
+      }
+    }
+
+    return { allowed: true };
+  };
+
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
       // console.log('📨 Shell message received:', data.type);
       if (data.type === 'init') {
         // Initialize shell with project path and session info
-        const projectPath = data.projectPath || process.cwd();
+        const shellRoot = getShellRoot();
+        const projectPath = data.projectPath ? path.resolve(data.projectPath) : (shellRoot || process.cwd());
+        try {
+          ensureShellRootExists();
+          assertPathWithinShellRoot(projectPath, 'Shell working directory');
+        } catch (error) {
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: `\r\n\x1b[31m${error.message}\x1b[0m\r\n`
+          }));
+          return;
+        }
+        currentShellCwd = projectPath;
         // First send a welcome message
         const welcomeMsg = `\x1b[36mTerminal started in: ${projectPath}\x1b[0m\r\n`;
         ws.send(JSON.stringify({
@@ -621,15 +761,54 @@ function handleShellConnection(ws) {
           }));
         }
       } else if (data.type === 'input') {
-        // Send input to shell process
-        if (shellProcess && shellProcess.write) {
+        if (!shellProcess || !shellProcess.write) {
+          return;
+        }
+        const payload = data.data;
+        // If no root configured, passthrough
+        if (!shellRoot) {
           try {
-            shellProcess.write(data.data);
+            shellProcess.write(payload);
           } catch (error) {
-            // console.error('Error writing to shell:', error);
           }
-        } else {
-          // console.warn('No active shell process to send input to');
+          return;
+        }
+
+        for (let i = 0; i < payload.length; i++) {
+          const ch = payload[i];
+          if (ch === '\u0003') { // Ctrl+C
+            inputBuffer = '';
+            shellProcess.write(ch);
+            continue;
+          }
+          if (ch === '\u0008' || ch === '\u007f') { // Backspace/Delete
+            inputBuffer = inputBuffer.slice(0, -1);
+            shellProcess.write(ch);
+            continue;
+          }
+          if (ch === '\r' || ch === '\n') {
+            const validation = validateCommand(inputBuffer);
+            if (!validation.allowed) {
+              ws.send(JSON.stringify({
+                type: 'output',
+                data: `\r\n\x1b[31m${validation.message}\x1b[0m\r\n`
+              }));
+              // Clear current line in the shell
+              try {
+                shellProcess.write('\u0015'); // Ctrl+U clears line in bash
+              } catch {}
+              inputBuffer = '';
+              continue;
+            }
+            if (validation.nextCwd) {
+              currentShellCwd = validation.nextCwd;
+            }
+            shellProcess.write(ch);
+            inputBuffer = '';
+            continue;
+          }
+          inputBuffer += ch;
+          shellProcess.write(ch);
         }
       } else if (data.type === 'resize' && (shellProcess && shellProcess.resize)) {
                     shellProcess.resize(data.cols, data.rows);

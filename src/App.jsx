@@ -24,8 +24,8 @@ import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
-import QuickSettingsPanel from './components/QuickSettingsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
+import { Settings } from 'lucide-react';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -52,7 +52,6 @@ function AppContent() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
-  const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useState(() => {
     const saved = localStorage.getItem('autoExpandTools');
     return saved !== null ? JSON.parse(saved) : false;
@@ -65,6 +64,43 @@ function AppContent() {
     const saved = localStorage.getItem('autoScrollToBottom');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [userBadge, setUserBadge] = useState({ label: 'Guest', initials: 'GU' });
+  // Keep browser tab title consistent with branding
+  useEffect(() => {
+    document.title = 'FlamePilot Web';
+  }, []);
+
+  // Derive user avatar label from cookies (prod: appAccessKey, dev: DEV_ACCESS_KEY)
+  useEffect(() => {
+    const maskKey = (value) => {
+      if (!value) return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return trimmed.length <= 4 ? `***${trimmed}` : `***${trimmed.slice(-4)}`;
+    };
+
+    const parseCookies = () => {
+      const entries = document.cookie.split(';')
+        .map(c => c.trim())
+        .filter(Boolean)
+        .map(pair => {
+          const [k, ...rest] = pair.split('=');
+          return [k, rest.join('=')];
+        });
+      return Object.fromEntries(entries);
+    };
+
+    const cookies = parseCookies();
+    const accessKey = cookies.appAccessKey || cookies.accessKey || cookies.DEV_ACCESS_KEY;
+    const masked = maskKey(accessKey);
+    const initialsSource = masked ? masked.replace(/\*/g, '') : 'GU';
+    const initials = (initialsSource.slice(-2) || 'GU').toUpperCase();
+
+    setUserBadge({
+      label: masked || 'Guest',
+      initials
+    });
+  }, []);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -486,100 +522,128 @@ function AppContent() {
   };
 
   return (
-    <div className="fixed inset-0 flex bg-zinc-700 text-white">
-      {/* Fixed Desktop Sidebar */}
-      {!isMobile && (
-        <div className="w-80 flex-shrink-0 border-r border-border bg-card">
-          <div className="h-full overflow-hidden">
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
-            />
+    <div className="fixed inset-0 flex flex-col bg-gradient-to-br from-zinc-50 via-white to-gemini-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-slate-950 text-zinc-900 dark:text-white transition-colors">
+      <header className="h-12 sm:h-14 flex items-center justify-between px-3 sm:px-4 border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-gemini-500 to-gemini-700 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+              FP
+            </div>
+            <div className="text-base sm:text-lg font-semibold text-gemini-700 dark:text-gemini-200 leading-tight">FlamePilot Web</div>
           </div>
         </div>
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isMobile && (
-        <div className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${
-          sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-        }`}>
-          <div
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
-          />
-          <div
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => setShowToolsSettings(true)}
+            className="p-2 rounded-md text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            title="Settings"
           >
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
-            />
+            <Settings className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2 pl-2">
+            <div className="w-8 h-8 rounded-full bg-gemini-500 text-white flex items-center justify-center text-sm font-semibold">
+              {userBadge.initials}
+            </div>
+            <span className="text-sm font-medium text-foreground hidden sm:inline">{userBadge.label}</span>
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          messages={messages}
-          isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
-          isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
-          onReplaceTemporarySession={replaceTemporarySession}
-          onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
-          onShowSettings={() => setShowToolsSettings(true)}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          autoScrollToBottom={autoScrollToBottom}
-        />
+      <div className="flex-1 flex min-h-0">
+        {/* Fixed Desktop Sidebar */}
+        {!isMobile && (
+          <div className="w-80 flex-shrink-0 border-r border-border bg-card">
+            <div className="h-full overflow-hidden">
+              <Sidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                onProjectSelect={handleProjectSelect}
+                onSessionSelect={handleSessionSelect}
+                onNewSession={handleNewSession}
+                onSessionDelete={handleSessionDelete}
+                onProjectDelete={handleProjectDelete}
+                isLoading={isLoadingProjects}
+                onRefresh={handleSidebarRefresh}
+                onShowSettings={() => setShowToolsSettings(true)}
+                updateAvailable={updateAvailable}
+                latestVersion={latestVersion}
+                currentVersion={currentVersion}
+                onShowVersionModal={() => setShowVersionModal(true)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Sidebar Overlay */}
+        {isMobile && (
+          <div className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${
+            sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
+          }`}>
+            <div
+              className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSidebarOpen(false);
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSidebarOpen(false);
+              }}
+            />
+            <div
+              className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
+                sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <Sidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                onProjectSelect={handleProjectSelect}
+                onSessionSelect={handleSessionSelect}
+                onNewSession={handleNewSession}
+                onSessionDelete={handleSessionDelete}
+                onProjectDelete={handleProjectDelete}
+                isLoading={isLoadingProjects}
+                onRefresh={handleSidebarRefresh}
+                onShowSettings={() => setShowToolsSettings(true)}
+                updateAvailable={updateAvailable}
+                latestVersion={latestVersion}
+                currentVersion={currentVersion}
+                onShowVersionModal={() => setShowVersionModal(true)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area - Flexible */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <MainContent
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            ws={ws}
+            sendMessage={sendMessage}
+            messages={messages}
+            isMobile={isMobile}
+            onMenuClick={() => setSidebarOpen(true)}
+            isLoading={isLoadingProjects}
+            onInputFocusChange={setIsInputFocused}
+            onSessionActive={markSessionAsActive}
+            onSessionInactive={markSessionAsInactive}
+            onReplaceTemporarySession={replaceTemporarySession}
+            onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
+            onShowSettings={() => setShowToolsSettings(true)}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            autoScrollToBottom={autoScrollToBottom}
+          />
+        </div>
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -590,30 +654,6 @@ function AppContent() {
           isInputFocused={isInputFocused}
         />
       )}
-      {/* Quick Settings Panel - Only show on chat tab */}
-      {activeTab === 'chat' && (
-        <QuickSettingsPanel
-          isOpen={showQuickSettings}
-          onToggle={setShowQuickSettings}
-          autoExpandTools={autoExpandTools}
-          onAutoExpandChange={(value) => {
-            setAutoExpandTools(value);
-            localStorage.setItem('autoExpandTools', JSON.stringify(value));
-          }}
-          showRawParameters={showRawParameters}
-          onShowRawParametersChange={(value) => {
-            setShowRawParameters(value);
-            localStorage.setItem('showRawParameters', JSON.stringify(value));
-          }}
-          autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={(value) => {
-            setAutoScrollToBottom(value);
-            localStorage.setItem('autoScrollToBottom', JSON.stringify(value));
-          }}
-          isMobile={isMobile}
-        />
-      )}
-
       {/* Tools Settings Modal */}
       <ToolsSettings
         isOpen={showToolsSettings}

@@ -102,10 +102,8 @@ This directory contains all the reusable React components that form the UI.
 *   **`MicButton.jsx`:** A button component that uses the `useAudioRecorder` hook to record audio and send it to the Whisper API for transcription.
 *   **`MobileNav.jsx`:** A bottom navigation bar for mobile devices.
 *   **`ProtectedRoute.jsx`:** A higher-order component that protects routes from unauthenticated access.
-*   **`QuickSettingsPanel.jsx`:** A collapsible panel for quickly accessing and changing common settings.
 *   **`TodoList.jsx`:** A component for displaying and managing a todo list.
 *   **`ToolsSettings.jsx`:** A modal component for configuring tool permissions and other settings.
-*   **`SpecDesign/`:** A feature for generating detailed design documents, requirements, and implementation tasks based on a high-level query.
 *   **`ui/`:** A collection of primitive UI components like `Button`, `Input`, and `Badge`, styled with `class-variance-authority`.
 
 ### `contexts/`

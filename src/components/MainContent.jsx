@@ -35,7 +35,7 @@ function MainContent({
   onSessionActive,        // Mark session as active when user sends message
   onSessionInactive,      // Mark session as inactive when conversation completes/aborts
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
-  onNavigateToSession,    // Navigate to a specific session (for Gemini CLI session duplication workaround)
+  onNavigateToSession,    // Navigate to a specific session (for legacy session duplication workaround)
   onShowSettings,         // Show tools settings panel
   autoExpandTools,        // Auto-expand tool accordions
   showRawParameters,      // Show raw parameters in tool accordions

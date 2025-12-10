@@ -8,10 +8,27 @@ export default defineConfig(({ mode }) => {
   const API_PORT = Number(env.PORT) || 4008
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'log-dev-url-separator',
+        configureServer(server) {
+          const originalPrintUrls = server.printUrls?.bind(server)
+          if (originalPrintUrls) {
+            server.printUrls = () => {
+              originalPrintUrls()
+              console.log('')
+            }
+          }
+        }
+      }
+    ],
     server: {
+      host: true,
       port: VITE_PORT,
       strictPort: true,
+      allowedHosts: ['.appspace.bohrium.com',],
       proxy: {
         '/api': `http://localhost:${API_PORT}`,
         '/ws': {
@@ -61,7 +78,8 @@ export default defineConfig(({ mode }) => {
       ]
     },
     define: {
-      __APP_ENV__: JSON.stringify(mode)
+      __APP_ENV__: JSON.stringify(mode),
+      __DEV_ACCESS_KEY__: JSON.stringify(env.DEV_ACCESS_KEY || '')
     }
   }
 })

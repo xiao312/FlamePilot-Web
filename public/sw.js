@@ -1,10 +1,6 @@
-// Service Worker for Gemini CLI UI PWA
-const CACHE_NAME = 'gemini-ui-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
+// Service Worker for FlamePilot Web
+const CACHE_NAME = 'flamepilot-ui-v2';
+const urlsToCache = ['/', '/index.html', '/manifest.json'];
 
 // Install event
 self.addEventListener('install', event => {
@@ -17,19 +13,26 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Fetch event
+// Fetch event (network-first for HTML to avoid stale titles)
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached response if found
-        if (response) {
+  const { request } = event;
+  const isHTML = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html');
+
+  if (isHTML) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, responseClone)).catch(() => {});
           return response;
-        }
-        // Otherwise fetch from network
-        return fetch(event.request);
-      }
-    )
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(response => response || fetch(request))
   );
 });
 

@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
+import { getShellRoot, isPathWithinShellRoot, assertPathWithinShellRoot, ensureShellRootExists } from './pathGuard.js';
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -180,6 +181,7 @@ async function extractProjectDirectory(projectName) {
 }
 
 async function getProjects() {
+  ensureShellRootExists();
   const geminiDir = path.join(process.env.HOME, '.gemini', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
@@ -193,6 +195,9 @@ async function getProjects() {
         const projectPath = path.join(geminiDir, entry.name);
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
+        if (getShellRoot() && !isPathWithinShellRoot(actualProjectDir)) {
+          continue; // Skip projects outside configured shell root
+        }
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
@@ -238,6 +243,9 @@ async function getProjects() {
           // Fall back to decoded project name
           actualProjectDir = projectName.replace(/-/g, '/');
         }
+      }
+      if (getShellRoot() && !isPathWithinShellRoot(actualProjectDir)) {
+        continue; // Skip projects outside configured shell root
       }
               const project = {
           name: projectName,
@@ -506,6 +514,12 @@ async function deleteProject(projectName) {
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
+  try {
+    ensureShellRootExists();
+    assertPathWithinShellRoot(absolutePath, 'Project path');
+  } catch (error) {
+    throw error;
+  }
   try {
     // Check if the path exists
     await fs.access(absolutePath);

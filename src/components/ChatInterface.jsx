@@ -1486,8 +1486,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'cli-response':
           console.log('Processing cli-response:', latestMessage);
           { const messageData = latestMessage.data.message || latestMessage.data;
-          // Handle Gemini CLI session duplication bug workaround:
-          // When resuming a session, Gemini CLI creates a new session instead of resuming.
+          // Handle legacy session duplication bug workaround:
+          // When resuming a session, some backends create a new session instead of resuming.
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
           if (latestMessage.data.type === 'system' &&
@@ -2077,7 +2077,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     const toolsSettings = getToolsSettings();
 
-    // Send command to Gemini CLI via WebSocket with images
+    // Send command to backend via WebSocket with images
     sendMessage({
       type: 'gemini-command',
       command: input,
@@ -2516,7 +2516,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             <button
               type="button"
               onClick={open}
-              className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2569,7 +2569,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }`}>
             Enter to send • Tab for modes
           </div>
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-2">
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-1">
             Photon billing: 3 photons per message + 3 photons per 1k tokens (rounded up).
           </div>
         </form>

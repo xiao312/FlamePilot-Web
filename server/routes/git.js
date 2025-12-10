@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
+import { assertPathWithinShellRoot, ensureShellRootExists } from '../pathGuard.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -11,11 +12,17 @@ const execAsync = promisify(exec);
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
   try {
-    return await extractProjectDirectory(projectName);
+    const projectPath = await extractProjectDirectory(projectName);
+    ensureShellRootExists();
+    assertPathWithinShellRoot(projectPath, 'Project path');
+    return projectPath;
   } catch (error) {
     // console.error(`Error extracting project directory for ${projectName}:`, error);
     // Fallback to the old method
-    return projectName.replace(/-/g, '/');
+    const fallbackPath = projectName.replace(/-/g, '/');
+    ensureShellRootExists();
+    assertPathWithinShellRoot(fallbackPath, 'Project path');
+    return fallbackPath;
   }
 }
 
@@ -44,6 +51,13 @@ async function validateGitRepository(projectPath) {
     }
     throw new Error('Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.');
   }
+}
+
+function handleGitError(res, error, fallbackMessage = 'Git operation failed', fallbackStatus = 500) {
+  if (error.statusCode || error.status) {
+    return res.status(error.statusCode || error.status).json({ error: error.message });
+  }
+  return res.status(fallbackStatus).json({ error: fallbackMessage, details: error.message });
 }
 
 // Get git status for a project
@@ -99,6 +113,9 @@ router.get('/status', async (req, res) => {
       untracked
     });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git status error:', error);
     res.json({ 
       error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository') 
@@ -150,6 +167,9 @@ router.get('/diff', async (req, res) => {
     
     res.json({ diff });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git diff error:', error);
     res.json({ error: error.message });
   }
@@ -179,6 +199,9 @@ router.post('/commit', async (req, res) => {
     
     res.json({ success: true, output: stdout });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git commit error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -222,6 +245,9 @@ router.get('/branches', async (req, res) => {
     
     res.json({ branches });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git branches error:', error);
     res.json({ error: error.message });
   }
@@ -243,6 +269,9 @@ router.post('/checkout', async (req, res) => {
     
     res.json({ success: true, output: stdout });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git checkout error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -264,6 +293,9 @@ router.post('/create-branch', async (req, res) => {
     
     res.json({ success: true, output: stdout });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git create branch error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -315,6 +347,9 @@ router.get('/commits', async (req, res) => {
     
     res.json({ commits });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git commits error:', error);
     res.json({ error: error.message });
   }
@@ -339,6 +374,9 @@ router.get('/commit-diff', async (req, res) => {
     
     res.json({ diff: stdout });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git commit diff error:', error);
     res.json({ error: error.message });
   }
@@ -377,6 +415,9 @@ router.post('/generate-commit-message', async (req, res) => {
     
     res.json({ message });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Generate commit message error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -472,6 +513,9 @@ router.get('/remote-status', async (req, res) => {
       isUpToDate: ahead === 0 && behind === 0
     });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git remote status error:', error);
     res.json({ error: error.message });
   }
@@ -506,6 +550,9 @@ router.post('/fetch', async (req, res) => {
     
     res.json({ success: true, output: stdout || 'Fetch completed successfully', remoteName });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git fetch error:', error);
     res.status(500).json({ 
       error: 'Fetch failed', 
@@ -555,6 +602,9 @@ router.post('/pull', async (req, res) => {
       remoteBranch
     });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git pull error:', error);
     
     // Enhanced error handling for common pull scenarios
@@ -622,6 +672,9 @@ router.post('/push', async (req, res) => {
       remoteBranch
     });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git push error:', error);
     
     // Enhanced error handling for common push scenarios
@@ -689,6 +742,9 @@ router.post('/discard', async (req, res) => {
     
     res.json({ success: true, message: `Changes discarded for ${file}` });
   } catch (error) {
+    if (error.statusCode || error.status) {
+      return handleGitError(res, error);
+    }
     // console.error('Git discard error:', error);
     res.status(500).json({ error: error.message });
   }

@@ -91,6 +91,8 @@ npm --version   # Compatible npm version
 
 **🔒 Important Notice**: All FlamePilot CLI tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
 
+**Shell sandbox (recommended)**: set `SHELL_ROOT=/absolute/path` in `.env` to pin the in-app shell and file APIs to that directory; requests outside the root are rejected.
+
 ### Enabling Tools
 
 To use FlamePilot CLI's full functionality, you'll need to manually enable tools:

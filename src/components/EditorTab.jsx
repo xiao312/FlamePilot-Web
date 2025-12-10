@@ -192,7 +192,7 @@ function EditorTab({
   return (
     <div className="flex h-full glass-morphism dark:glass-morphism-dark">
       {/* File Tree - Narrower to make room for chat sidebar */}
-      <div className="w-1/5 border-r border-zinc-200 dark:border-zinc-700">
+      <div className="w-1/5 min-w-0 border-r border-zinc-200 dark:border-zinc-700">
         <EditorFileTree
           selectedProject={selectedProject}
           onFileSelect={handleFileSelect}
@@ -201,7 +201,7 @@ function EditorTab({
       </div>
 
       {/* Code Editor Area with Tabs */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
         <CodeTabs
           selectedProject={selectedProject}
           openFiles={openFiles}

@@ -3,14 +3,15 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import sessionManager from './sessionManager.js';
+import logger, { auditLogger, logUserEvent } from './logger.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
-const PER_MESSAGE_PHOTONS = 0; // Flat cost per user message
+const PER_MESSAGE_PHOTONS = 3; // Flat cost per user message
 
 function computePhotonChargeForTokens(deltaTokens) {
   // Rate: 3 photons per 1k tokens; round up to whole photons
-  const ratePerToken = 0 / 1000;
+  const ratePerToken = 3 / 1000;
   const raw = (deltaTokens || 0) * ratePerToken;
   return Math.ceil(raw);
 }
@@ -20,7 +21,7 @@ async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
 
   // Dev mode mocking: don't hit real API
   if (process.env.PHOTON_DEV_MODE === '1' && process.env.PHOTON_MOCK === '1') {
-    console.log(`[DEV-MOCK] Would charge ${eventValue} photons (skuId=${numericSkuId})`);
+    logger.info('[Photon] Dev mock skip', { action: 'photon_mock', eventValue, skuId: numericSkuId });
     return { statusCode: 200, body: { code: 0, mock: true } };
   }
 
@@ -53,7 +54,7 @@ async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
     scene: 'appCustomizeCharge',
   };
   // Debug (mask secrets): log payload and headers (masked)
-  console.log('[Photon] Request payload:', {
+  auditLogger.info('photon_request_payload', {
     bizNo,
     changeType: payload.changeType,
     eventValue: payload.eventValue,
@@ -85,7 +86,9 @@ async function chargePhotons({ accessKey, clientName, skuId, eventValue }) {
 }
 
 async function spawnGemini(command, options = {}, ws) {
-   console.log('Spawning Gemini CLI for command:', command);
+   const startTime = Date.now();
+   const commandPreview = String(command || '').slice(0, 120);
+   const uid = options.user?.username || options.user?.uid || 'anonymous';
    return new Promise(async (resolve, reject) => {
      const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
      let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -94,6 +97,8 @@ async function spawnGemini(command, options = {}, ws) {
      let lastTokenCount = 0;   // Track last token usage
      let billedTokenCount = 0; // Track tokens already billed
      let geminiProcess; // Will hold the spawned process reference for fatal billing failures
+     let totalPhotonsCharged = 0;
+     let chargeStatus = 'pending';
     
     // Dev mode: use env vars; Prod mode: use options from cookies
     const isDevMode = process.env.PHOTON_DEV_MODE === '1';
@@ -118,9 +123,23 @@ async function spawnGemini(command, options = {}, ws) {
         .filter(Boolean)
     );
     const isWhitelisted = cleanAccessKey && whitelistAccessKeys.has(cleanAccessKey);
-    const billingEnabledFlag = !isMock && hasValidCredentials;
+    // Bill for every user when credentials are present; skip only in explicit mock mode
+    const billingEnabledFlag = hasValidCredentials && !isMock;
+    const shouldBill = billingEnabledFlag && !isWhitelisted;
 
-    console.log('[Photon] Session billing config:', {
+    logger.info('call_start', {
+      action: 'call_start',
+      uid,
+      commandPreview,
+      shouldBill,
+      isWhitelisted,
+      console: true
+    });
+    await logUserEvent(uid, 'call_start', { commandPreview, sessionId: options.sessionId || null, shouldBill, isWhitelisted });
+
+    logger.info('[Photon] Session billing config', {
+      action: 'photon_config',
+      uid,
       isDevMode,
       hasValidCredentials,
       isWhitelisted,
@@ -129,30 +148,34 @@ async function spawnGemini(command, options = {}, ws) {
       accessKeySet: Boolean(accessKey),
       accessKeyTail: cleanAccessKey ? cleanAccessKey.slice(-6) : null,
       billingEnabledFlag,
-      willBill: billingEnabledFlag && !isWhitelisted,
+      willBill: shouldBill,
       whitelistCount: whitelistAccessKeys.size,
+      console: false
     });
 
     const billPhotons = async ({ photons, tokensUsed, reason }) => {
       if (!billingEnabledFlag) {
-        console.log('[Photon] Billing disabled by config.', { reason });
+        chargeStatus = 'skip_config';
+        logger.info('[Photon] Billing disabled by config', { action: 'photon_skip', uid, reason });
         return;
       }
       if (isWhitelisted) {
-        console.log('[Photon] Billing skipped (whitelist).', { reason, isWhitelisted });
+        chargeStatus = 'skip_whitelist';
+        logger.info('[Photon] Billing skipped (whitelist)', { action: 'photon_skip', uid, reason, isWhitelisted });
         return;
       }
       if (!hasValidCredentials || !ws) {
-        console.warn('[Photon] Skipping charge due to missing/invalid credentials', { hasValidCredentials, skuId });
+        chargeStatus = 'missing_credentials';
+        logger.warn('[Photon] Skipping charge due to missing/invalid credentials', { action: 'photon_skip', uid, hasValidCredentials, skuId });
         return;
       }
       if (typeof photons !== 'number' || photons < 0) {
-        console.log('[Photon] Skipping charge due to invalid photons', { photons, reason });
+        logger.info('[Photon] Skipping charge due to invalid photons', { action: 'photon_skip', uid, photons, reason });
         return;
       }
 
       try {
-        console.log(`[Photon] ${reason} charge attempt: photons=${photons} tokens=${tokensUsed} skuId=${skuId} devMode=${isDevMode}`);
+        logger.info('[Photon] Charge attempt', { action: 'photon_charge_attempt', uid, photons, tokensUsed, skuId, reason, isDevMode });
         const chargeResult = await chargePhotons({
           accessKey,
           clientName,
@@ -161,7 +184,10 @@ async function spawnGemini(command, options = {}, ws) {
         });
         const respBody = chargeResult.body || chargeResult;
         const code = respBody && typeof respBody.code === 'number' ? respBody.code : undefined;
-        console.log('[Photon] Charge response:', JSON.stringify(respBody));
+        auditLogger.info('photon_charge_response', { uid, photons, tokensUsed, reason, skuId, response: respBody });
+        await logUserEvent(uid, 'photon_charge', { photons, tokensUsed, reason, skuId, response: respBody });
+        totalPhotonsCharged += photons;
+        chargeStatus = 'charged';
 
         if (code !== undefined && code !== 0) {
           throw new Error(`Photon charge returned code=${code}`);
@@ -181,14 +207,15 @@ async function spawnGemini(command, options = {}, ws) {
           },
         }));
       } catch (err) {
-        console.error(`[Photon] ${reason} charge failed:`, err);
+        chargeStatus = 'charge_error';
+        logger.error('[Photon] Charge failed', { action: 'photon_charge_failed', uid, reason, error: err.message });
         ws.send(JSON.stringify({
           type: 'photon-charge',
           error: `Photon charging failed (${reason})`,
           tokensUsed,
         }));
         if (geminiProcess && typeof geminiProcess.kill === 'function') {
-          console.error('[Photon] Killing Gemini process due to billing failure');
+          logger.error('[Photon] Killing Gemini process due to billing failure', { action: 'photon_charge_failed_kill', reason });
           try { geminiProcess.kill('SIGTERM'); } catch {}
         }
         // Notify chat flow that billing failed so UI can stop loading
@@ -230,7 +257,7 @@ async function spawnGemini(command, options = {}, ws) {
     
     // Build Gemini CLI command - start with print/resume flags first
     const args = ['web',];
-    console.log('Building Gemini CLI command with args:', args);
+    await logUserEvent(uid, 'gemini_command_init', { args });
     
     // Add prompt flag with command if we have a command
     if (command && command.trim()) {
@@ -256,7 +283,6 @@ async function spawnGemini(command, options = {}, ws) {
     // Clean the path by removing any non-printable characters
     const cleanPath = (cwd || process.cwd()).replace(/[^\x20-\x7E]/g, '').replace(/>/g, '').trim();
     const workingDir = cleanPath;
-    // Debug - workingDir
     
     // Handle images by saving them to temporary files and passing paths to Gemini
     const tempImagePaths = [];
@@ -398,15 +424,11 @@ async function spawnGemini(command, options = {}, ws) {
     // Gemini doesn't support these tool permission flags
     // Skip all tool settings
     
-    // console.log('Spawning Gemini CLI with args:', args);
-    console.log('Working directory:', workingDir);
-
     // Try to find gemini in PATH first, then fall back to environment variable
     const geminiPath = process.env.GEMINI_PATH || 'flame-pilot';
-    // console.log('Full command:', geminiPath, args.join(' '));
-
-    const fullCommand = `cd "${workingDir}" && ${geminiPath} web -m "${promptToUse}"`;
-    console.log('Executing command:', fullCommand);
+    const proxyPrefix = "export http_proxy='http://10.0.1.158:8118' && export https_proxy='http://10.0.1.158:8118' &&";
+    const fullCommand = `cd "${workingDir}" && ${proxyPrefix} ${geminiPath} web -m "${promptToUse}"`;
+    await logUserEvent(uid, 'gemini_spawn_details', { workingDir, fullCommand, args });
     geminiProcess = spawn('bash', ['-c', fullCommand], {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -451,7 +473,7 @@ async function spawnGemini(command, options = {}, ws) {
     
     geminiProcess.stdout.on('data', async (data) => {
       const rawOutput = data.toString();
-      console.log('Raw stdout:', rawOutput);
+      logUserEvent(uid, 'cli_stdout', { sessionId: capturedSessionId || sessionId, output: rawOutput });
       // hasReceivedOutput = true;
       // clearTimeout(timeout);
       
@@ -475,7 +497,6 @@ async function spawnGemini(command, options = {}, ws) {
             const parsed = JSON.parse(line);
           if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
             // Send the structured data directly
-            console.log('Sending to WebSocket:', parsed);
             ws.send(JSON.stringify(parsed));
 
             // Track last token usage if present
@@ -544,7 +565,7 @@ async function spawnGemini(command, options = {}, ws) {
     // Handle stderr
     geminiProcess.stderr.on('data', (data) => {
       const errorMsg = data.toString();
-      console.log('Gemini stderr:', errorMsg);
+      logUserEvent(uid, 'cli_stderr', { sessionId: capturedSessionId || sessionId, error: errorMsg });
       
       // Filter out deprecation warnings
       if (errorMsg.includes('[DEP0040]') ||
@@ -564,7 +585,6 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Handle process completion
     geminiProcess.on('close', async (code) => {
-      console.log(`Gemini CLI process exited with code ${code}`);
       // clearTimeout(timeout);
       
       // Clean up process reference
@@ -584,25 +604,21 @@ async function spawnGemini(command, options = {}, ws) {
           try {
             await billPhotons({ photons, tokensUsed: remainingTokens, reason: 'token-final' });
           } catch (err) {
-            console.error('[Photon] token-final charge error (continuing):', err);
+            logger.error('[Photon] token-final charge error (continuing)', { action: 'photon_charge_failed', uid, error: err.message });
           }
           billedTokenCount = lastTokenCount;
         }
       } catch (err) {
-        console.error('[Photon] Final token charge failed:', err);
+        logger.error('[Photon] Final token charge failed', { action: 'photon_charge_failed', uid, error: err.message });
       }
       // --- Photon charging end ---
 
-       console.log('WebSocket readyState:', ws.readyState);
-       console.log('Sending gemini-complete:', { type: 'gemini-complete', exitCode: code, isNewSession: !sessionId && !!command });
        if (ws.readyState === 1) { // WebSocket.OPEN
          ws.send(JSON.stringify({
            type: 'gemini-complete',
            exitCode: code,
            isNewSession: !sessionId && !!command // Flag to indicate this was a new session
          }));
-       } else {
-         console.log('WebSocket not open, cannot send gemini-complete');
        }
       
       // Clean up temporary image files if any
@@ -618,7 +634,36 @@ async function spawnGemini(command, options = {}, ws) {
           });
         }
       }
-      
+
+      const durationMs = Date.now() - startTime;
+      const status = code === 0 ? 'success' : 'error';
+      const tokensUsed = lastTokenCount || 0;
+      const photonsCharged = totalPhotonsCharged;
+      const finalChargeStatus = shouldBill ? chargeStatus : 'no_billing';
+
+      logger.info('call_complete', {
+        action: 'call_complete',
+        uid,
+        status,
+        exitCode: code,
+        durationMs,
+        tokensUsed,
+        photonsCharged,
+        chargeStatus: finalChargeStatus,
+        shouldBill,
+        console: true
+      });
+      await logUserEvent(uid, 'call_complete', {
+        status,
+        exitCode: code,
+        durationMs,
+        tokensUsed,
+        photonsCharged,
+        chargeStatus: finalChargeStatus,
+        sessionId: finalSessionId,
+        shouldBill
+      });
+
       if (code === 0) {
         resolve();
       } else {
@@ -706,46 +751,5 @@ function abortGeminiSession(sessionId) {
 
 export {
   spawnGemini,
-  abortGeminiSession,
-  getGeminiSpec
+  abortGeminiSession
 };
-
-async function getGeminiSpec(type, context) {
-  console.log('Generating spec for type:', type);
-  return new Promise(async (resolve, reject) => {
-    let fullResponse = '';
-    const args = [];
-
-    const prompt = `Generate a ${type} for a new feature. Here is the context:\n\n${context}`;
-    args.push('-m', prompt);
-
-    const geminiPath = process.env.GEMINI_PATH || 'gemini';
-    const geminiProcess = spawn(geminiPath, args, {
-      cwd: process.cwd(),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env }
-    });
-
-    geminiProcess.stdin.end();
-
-    geminiProcess.stdout.on('data', (data) => {
-      fullResponse += data.toString();
-    });
-
-    geminiProcess.stderr.on('data', (data) => {
-      console.error(`Gemini CLI stderr: ${data}`);
-    });
-
-    geminiProcess.on('close', (code) => {
-      if (code === 0) {
-        resolve(fullResponse);
-      } else {
-        reject(new Error(`Gemini CLI exited with code ${code}`));
-      }
-    });
-
-    geminiProcess.on('error', (error) => {
-      reject(error);
-    });
-  });
-}

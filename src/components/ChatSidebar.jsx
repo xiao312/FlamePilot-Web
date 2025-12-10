@@ -74,7 +74,7 @@ function ChatSidebar({
 
     return (
       <div
-        className="h-full bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col glass-morphism dark:glass-morphism-dark"
+        className="relative h-full flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col glass-morphism dark:glass-morphism-dark"
         style={{ width: `${width}px` }}
       >
         {/* Resize Handle */}
@@ -86,7 +86,7 @@ function ChatSidebar({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
           <h3 className="text-lg font-semibold text-gemini-700 dark:text-gemini-300">
-            Gemini Chat
+            FlamePilot Chat
           </h3>
           <button
             onClick={onToggle}
@@ -156,7 +156,7 @@ function ChatSidebar({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
           <h3 className="text-lg font-semibold text-gemini-700 dark:text-gemini-300">
-            Gemini Chat
+            FlamePilot Chat
           </h3>
           <button 
             onClick={onToggle}

@@ -38,6 +38,23 @@ const userDb = {
     }
   },
 
+  // Create or fetch an external (passwordless) user by username
+  getOrCreateExternalUser: (username) => {
+    try {
+      const existing = db.prepare('SELECT * FROM geminicliui_users WHERE username = ? AND is_active = 1').get(username);
+      if (existing) {
+        return existing;
+      }
+      // Use a static placeholder hash since external users don't use passwords
+      const placeholderHash = 'external-user';
+      const stmt = db.prepare('INSERT INTO geminicliui_users (username, password_hash) VALUES (?, ?)');
+      const result = stmt.run(username, placeholderHash);
+      return { id: result.lastInsertRowid, username, password_hash: placeholderHash };
+    } catch (err) {
+      throw err;
+    }
+  },
+
   // Create a new user
   createUser: (username, passwordHash) => {
     try {
