@@ -409,6 +409,20 @@ function Shell({ selectedProject, selectedSession, isActive }) {
         return;
       }
 
+      // Derive WebSocket base URL robustly (avoid trailing colons/empty ports)
+      const deriveWsBaseUrl = (rawUrl) => {
+        try {
+          const urlObj = new URL(rawUrl || window.location.href);
+          const protocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = urlObj.host.replace(/:$/, ''); // strip stray trailing colon
+          return `${protocol}//${host}`;
+        } catch (err) {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = window.location.host.replace(/:$/, '');
+          return `${protocol}//${host}`;
+        }
+      };
+
       // Fetch server configuration to get the correct WebSocket URL
       let wsBaseUrl;
       try {
@@ -418,24 +432,36 @@ function Shell({ selectedProject, selectedSession, isActive }) {
           }
         });
         const config = await configResponse.json();
-        wsBaseUrl = config.wsUrl;
+        wsBaseUrl = deriveWsBaseUrl(config.wsUrl);
 
         // If the config returns localhost but we're not on localhost, use current host but with API server port
         if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           // For development, API server is typically on port 4008 when Vite is on 4009
           const apiPort = window.location.port === '4009' ? '4008' : window.location.port;
-          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+          wsBaseUrl = `${protocol}//${window.location.hostname}${apiPort ? `:${apiPort}` : ''}`;
         }
       } catch (error) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // For development, API server is typically on port 4008 when Vite is on 4009
-        const apiPort = window.location.port === '4009' ? '4008' : window.location.port;
-        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+        wsBaseUrl = deriveWsBaseUrl();
       }
 
-      // Include token in WebSocket URL as query parameter
-      const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
+      // Build WebSocket URL safely to avoid stray colons like "host:/shell"
+      const buildWsUrl = () => {
+        try {
+          const url = new URL(wsBaseUrl);
+          url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          url.pathname = '/shell';
+          url.search = `token=${encodeURIComponent(token)}`;
+          // If URL had an empty port that leaves a trailing colon, strip it
+          const cleaned = url.toString().replace(/:(?=\/shell\?token)/, '');
+          return cleaned;
+        } catch {
+          const normalizedBase = wsBaseUrl.replace(/\/+$/, '').replace(/:\//, '/').replace(/:+$/, '');
+          return `${normalizedBase}/shell?token=${encodeURIComponent(token)}`;
+        }
+      };
+
+      const wsUrl = buildWsUrl();
       console.log('Connecting to WebSocket:', wsUrl.replace(/token=.*/, 'token=[REDACTED]'));
 
       ws.current = new WebSocket(wsUrl);

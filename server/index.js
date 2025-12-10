@@ -46,6 +46,7 @@ import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { getShellRoot, isPathWithinShellRoot, assertPathWithinShellRoot, ensureShellRootExists } from './pathGuard.js';
+import { ensureUserRoot, getUserRoot, quotaGuard, getQuotaUsageBytes, getQuotaLimitBytes } from './userPaths.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -240,7 +241,14 @@ app.get('/api/config', authenticateToken, (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
-    const projects = await getProjects();
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
+    const projects = await getProjects(uid);
     const root = getShellRoot();
     const filteredProjects = root ? projects.filter(p => p.path && isPathWithinShellRoot(p.path)) : projects;
     res.json(filteredProjects);
@@ -254,8 +262,15 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
 
 app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     // Extract the actual project directory path
-    const projectPath = await extractProjectDirectory(req.params.projectName);
+    const projectPath = await extractProjectDirectory(req.params.projectName, uid);
     try {
       ensureShellRootExists();
       assertPathWithinShellRoot(projectPath, 'Project path');
@@ -280,6 +295,13 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     const messages = sessionManager.getSessionMessages(sessionId);
     res.json({ messages });
   } catch (error) {
@@ -292,7 +314,9 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
   try {
     const { displayName } = req.body;
     try {
-      const projectPath = await extractProjectDirectory(req.params.projectName);
+      const uid = req.user?.username || req.user?.id || 'anonymous';
+      ensureUserRoot(uid);
+      const projectPath = await extractProjectDirectory(req.params.projectName, uid);
       ensureShellRootExists();
       assertPathWithinShellRoot(projectPath, 'Project path');
     } catch (error) {
@@ -309,6 +333,8 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
 app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
     await sessionManager.deleteSession(sessionId);
     res.json({ success: true });
   } catch (error) {
@@ -321,7 +347,9 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
   try {
     const { projectName } = req.params;
     try {
-      const projectPath = await extractProjectDirectory(projectName);
+      const uid = req.user?.username || req.user?.id || 'anonymous';
+      ensureUserRoot(uid);
+      const projectPath = await extractProjectDirectory(projectName, uid);
       ensureShellRootExists();
       assertPathWithinShellRoot(projectPath, 'Project path');
     } catch (error) {
@@ -337,6 +365,8 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
 // Create project endpoint
 app.post('/api/projects/create', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
     const { path: projectPath } = req.body;
     if (!projectPath || !projectPath.trim()) {
       return res.status(400).json({ error: 'Project path is required' });
@@ -345,6 +375,11 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     try {
       ensureShellRootExists();
       assertPathWithinShellRoot(resolvedPath, 'Project path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
+    try {
+      quotaGuard(uid);
     } catch (error) {
       return respondWithGuardError(res, error);
     }
@@ -359,6 +394,8 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 // Read file content endpoint
 app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
     const { projectName } = req.params;
     const { filePath } = req.query;
     // console.log('📄 File read request:', projectName, filePath);
@@ -374,6 +411,11 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
       return respondWithGuardError(res, error);
     }
     const content = await fsPromises.readFile(filePath, 'utf8');
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     res.json({ content, path: filePath });
   } catch (error) {
     // console.error('Error reading file:', error);
@@ -390,6 +432,13 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 // Serve binary file content endpoint (for images, etc.)
 app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     const { projectName } = req.params;
     const { path: filePath } = req.query;
     // console.log('🖼️ Binary file serve request:', projectName, filePath);
@@ -402,6 +451,11 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     try {
       ensureShellRootExists();
       assertPathWithinShellRoot(filePath, 'File path');
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
+    try {
+      quotaGuard(uid);
     } catch (error) {
       return respondWithGuardError(res, error);
     }
@@ -434,6 +488,8 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 // Save file content endpoint
 app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
     const { projectName } = req.params;
     const { filePath, content } = req.body;
     // console.log('💾 File save request:', projectName, filePath);
@@ -450,6 +506,11 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
     if (content === undefined) {
       return res.status(400).json({ error: 'Content is required' });
+    }
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
     }
     // Create backup of original file
     try {
@@ -480,11 +541,18 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
   try {
+    const uid = req.user?.username || req.user?.id || 'anonymous';
+    ensureUserRoot(uid);
+    try {
+      quotaGuard(uid);
+    } catch (error) {
+      return respondWithGuardError(res, error);
+    }
     // Using fsPromises from import
     // Use extractProjectDirectory to get the actual project path
     let actualPath;
     try {
-      actualPath = await extractProjectDirectory(req.params.projectName);
+      actualPath = await extractProjectDirectory(req.params.projectName, uid);
     } catch (error) {
       // console.error('Error extracting project directory:', error);
       // Fallback to simple dash replacement
@@ -599,6 +667,10 @@ function handleShellConnection(ws) {
   let shellProcess = null;
   let currentShellCwd = null;
   let inputBuffer = '';
+
+  // Heartbeat to keep connection alive under server ping
+  ws.isAlive = true;
+  ws.on('pong', heartbeat);
 
   const shellRoot = getShellRoot();
 

@@ -3,6 +3,7 @@ import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
 import { getShellRoot, isPathWithinShellRoot, assertPathWithinShellRoot, ensureShellRootExists } from './pathGuard.js';
+import { getUserRoot, ensureUserRoot } from './userPaths.js';
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -63,12 +64,13 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
 }
 
 // Extract the actual project directory from JSONL sessions (with caching)
-async function extractProjectDirectory(projectName) {
+async function extractProjectDirectory(projectName, uid = null) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
     return projectDirectoryCache.get(projectName);
   }
-  const projectDir = path.join(process.env.HOME, '.gemini', 'projects', projectName);
+  const base = uid ? getUserRoot(uid) : path.join(process.env.HOME, '.gemini');
+  const projectDir = path.join(base, '.gemini', 'projects', projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
   let latestCwd = null;
@@ -180,9 +182,11 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
-async function getProjects() {
+async function getProjects(uid = null) {
   ensureShellRootExists();
-  const geminiDir = path.join(process.env.HOME, '.gemini', 'projects');
+  if (uid) ensureUserRoot(uid);
+  const base = uid ? getUserRoot(uid) : path.join(process.env.HOME, '.gemini');
+  const geminiDir = path.join(base, '.gemini', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();

@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import logger, { auditLogger, logUserEvent } from './logger.js';
+import { ensureUserRoot, quotaGuard } from './userPaths.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
@@ -89,6 +90,7 @@ async function spawnGemini(command, options = {}, ws) {
    const startTime = Date.now();
    const commandPreview = String(command || '').slice(0, 120);
    const uid = options.user?.username || options.user?.uid || 'anonymous';
+   ensureUserRoot(uid);
    return new Promise(async (resolve, reject) => {
      const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
      let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -127,15 +129,22 @@ async function spawnGemini(command, options = {}, ws) {
     const billingEnabledFlag = hasValidCredentials && !isMock;
     const shouldBill = billingEnabledFlag && !isWhitelisted;
 
-    logger.info('call_start', {
-      action: 'call_start',
-      uid,
-      commandPreview,
-      shouldBill,
-      isWhitelisted,
-      console: true
-    });
-    await logUserEvent(uid, 'call_start', { commandPreview, sessionId: options.sessionId || null, shouldBill, isWhitelisted });
+   logger.info('call_start', {
+     action: 'call_start',
+     uid,
+     commandPreview,
+     shouldBill,
+     isWhitelisted,
+     console: true
+   });
+   await logUserEvent(uid, 'call_start', { commandPreview, sessionId: options.sessionId || null, shouldBill, isWhitelisted });
+
+    try {
+      quotaGuard(uid);
+    } catch (err) {
+      logger.warn('Quota exceeded, refusing spawn', { action: 'call_reject_over_quota', uid });
+      return reject(err);
+    }
 
     logger.info('[Photon] Session billing config', {
       action: 'photon_config',
@@ -243,6 +252,39 @@ async function spawnGemini(command, options = {}, ws) {
       } catch {}
       return reject(err);
     }
+
+    const sendMessage = (payload) => {
+      try {
+        if (ws && ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify(payload));
+        }
+      } catch {
+        // Ignore send errors; connection may be closed
+      }
+    };
+
+    let stdoutBuffer = '';
+    let pendingTokenDelta = 0;
+    let billingInFlight = false;
+
+    const processBilling = async (reason) => {
+      if (billingInFlight || pendingTokenDelta <= 0) {
+        return;
+      }
+      billingInFlight = true;
+      while (pendingTokenDelta > 0) {
+        const tokensToBill = pendingTokenDelta;
+        pendingTokenDelta = 0;
+        const photons = computePhotonChargeForTokens(tokensToBill);
+        try {
+          await billPhotons({ photons, tokensUsed: tokensToBill, reason });
+          billedTokenCount += tokensToBill;
+        } catch (err) {
+          console.error(`[Photon] ${reason} charge error (continuing):`, err);
+        }
+      }
+      billingInFlight = false;
+    };
 
     // Process images if provided
     
@@ -472,13 +514,17 @@ async function spawnGemini(command, options = {}, ws) {
     // Handle stdout (outputs JSON lines)
     
     geminiProcess.stdout.on('data', async (data) => {
-      const rawOutput = data.toString();
-      logUserEvent(uid, 'cli_stdout', { sessionId: capturedSessionId || sessionId, output: rawOutput });
+      const chunk = data.toString();
+      stdoutBuffer += chunk;
+      logUserEvent(uid, 'cli_stdout', { sessionId: capturedSessionId || sessionId, output: chunk });
       // hasReceivedOutput = true;
       // clearTimeout(timeout);
       
+      // Split buffered data into lines; keep trailing partial in buffer
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() || '';
+
       // Filter out debug messages and system messages
-      const lines = rawOutput.split('\n');
       const filteredLines = lines.filter(line => {
         // Skip debug messages
         if (line.includes('[DEBUG]') ||
@@ -497,7 +543,7 @@ async function spawnGemini(command, options = {}, ws) {
             const parsed = JSON.parse(line);
           if (parsed && typeof parsed === 'object' && parsed.type === 'cli-response') {
             // Send the structured data directly
-            ws.send(JSON.stringify(parsed));
+            sendMessage(parsed);
 
             // Track last token usage if present
             const usage = parsed.data && parsed.data.usage;
@@ -505,13 +551,8 @@ async function spawnGemini(command, options = {}, ws) {
               lastTokenCount = usage.total_token_count;
               const deltaTokens = lastTokenCount - billedTokenCount;
               if (deltaTokens > 0) {
-                const photons = computePhotonChargeForTokens(deltaTokens);
-                try {
-                  await billPhotons({ photons, tokensUsed: deltaTokens, reason: 'token-delta' });
-                } catch (err) {
-                  console.error('[Photon] token-delta charge error (continuing):', err);
-                }
-                billedTokenCount = lastTokenCount;
+                pendingTokenDelta += deltaTokens;
+                queueMicrotask(() => processBilling('token-delta'));
               }
             }
 
@@ -555,10 +596,10 @@ async function spawnGemini(command, options = {}, ws) {
           activeGeminiProcesses.set(capturedSessionId, geminiProcess);
         }
         
-        ws.send(JSON.stringify({
+        sendMessage({
           type: 'session-created',
           sessionId: capturedSessionId
-        }));
+        });
       }
     });
     
@@ -575,12 +616,17 @@ async function spawnGemini(command, options = {}, ws) {
         // Debug - Gemini CLI warning (suppressed)
         return;
       }
+
+      // Filter benign bash/libtinfo noise
+      if (errorMsg.includes('libtinfo') && errorMsg.includes('no version information available')) {
+        return;
+      }
       
       // console.error('Gemini CLI stderr:', errorMsg);
-      ws.send(JSON.stringify({
+      sendMessage({
         type: 'gemini-error',
         error: errorMsg
-      }));
+      });
     });
 
     // Handle process completion
@@ -613,13 +659,11 @@ async function spawnGemini(command, options = {}, ws) {
       }
       // --- Photon charging end ---
 
-       if (ws.readyState === 1) { // WebSocket.OPEN
-         ws.send(JSON.stringify({
-           type: 'gemini-complete',
-           exitCode: code,
-           isNewSession: !sessionId && !!command // Flag to indicate this was a new session
-         }));
-       }
+       sendMessage({
+         type: 'gemini-complete',
+         exitCode: code,
+         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
+       });
       
       // Clean up temporary image files if any
       if (geminiProcess.tempImagePaths && geminiProcess.tempImagePaths.length > 0) {
