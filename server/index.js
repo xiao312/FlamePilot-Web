@@ -140,7 +140,7 @@ const logPhotonConfig = () => {
     .split(',')
     .map(v => v.trim())
     .filter(Boolean);
-  const devAccessKeySet = Boolean(process.env.DEV_ACCESS_KEY);
+  const devAccessKeySet = isDevMode ? Boolean(process.env.DEV_ACCESS_KEY) : false;
   const clientNameSet = Boolean(process.env.CLIENT_NAME);
   const skuIdSet = Boolean(process.env.SKU_ID);
   const photonSkuSet = Boolean(process.env.PHOTON_SKU_ID);
@@ -229,13 +229,16 @@ app.use(express.static(path.join(__dirname, '../dist')));
 app.get('/api/config', authenticateToken, (req, res) => {
   const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
+  const uid = req.user?.username || req.user?.id || 'anonymous';
+  const userRoot = getUserRoot(uid);
 
   // console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
 
   res.json({
     serverPort: PORT,
     wsUrl: `${protocol}://${host}`,
-    shellRoot: getShellRoot()
+    shellRoot: getShellRoot(),
+    userRoot
   });
 });
 

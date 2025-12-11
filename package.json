@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
     "dev-mock": "concurrently --kill-others \"npm run mock-server\" \"npm run client\"",
-    "server": "node server/index.js",
-    "mock-server": "GEMINI_PATH=./bin/gemini node server/index.js",
+    "server": "node server/bootstrap.js",
+    "mock-server": "GEMINI_PATH=./bin/gemini node server/bootstrap.js",
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",

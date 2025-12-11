@@ -108,6 +108,7 @@ async function spawnGemini(command, options = {}, ws) {
     const accessKey = isDevMode ? (process.env.DEV_ACCESS_KEY || options.accessKey) : options.accessKey;
     const clientName = isDevMode ? (process.env.CLIENT_NAME || options.clientName) : options.clientName;
     const rawSku = isDevMode ? (process.env.SKU_ID || options.skuId) : options.skuId;
+    const identitySource = isDevMode ? 'dev_env' : (options.user ? 'user' : 'none');
     const skuId = Number(rawSku);
 
     const hasValidCredentials = Boolean(
@@ -166,6 +167,7 @@ async function spawnGemini(command, options = {}, ws) {
       billingEnabledFlag,
       willBill: shouldBill,
       whitelistCount: whitelistAccessKeys.size,
+      identitySource,
       console: false
     });
 
@@ -182,7 +184,7 @@ async function spawnGemini(command, options = {}, ws) {
       }
       if (!hasValidCredentials || !ws) {
         chargeStatus = 'missing_credentials';
-        logger.warn('[Photon] Skipping charge due to missing/invalid credentials', { action: 'photon_skip', uid, hasValidCredentials, skuId });
+        logger.warn('[Photon] Skipping charge due to missing/invalid credentials', { action: 'photon_skip', uid, hasValidCredentials, skuId, identitySource });
         return;
       }
       if (typeof photons !== 'number' || photons < 0) {

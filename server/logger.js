@@ -24,9 +24,24 @@ try {
 }
 
 // Paths for application (general) and audit (detailed) logs
-const logPath = process.env.LOG_PATH || 'logs/application-%DATE%.log';
-const auditPath = process.env.AUDIT_LOG_PATH || 'logs/audit-%DATE%.log';
-const userLogDir = process.env.USER_LOG_DIR || path.join('logs', 'users');
+const fallbackLogPath = '/data/admin/application-%DATE%.log';
+const fallbackAuditPath = '/data/admin/audit-%DATE%.log';
+const fallbackUserLogDir = path.join('/data/admin', 'users');
+const logPath = process.env.LOG_PATH || fallbackLogPath;
+const auditPath = process.env.AUDIT_LOG_PATH || fallbackAuditPath;
+const userLogDir = process.env.USER_LOG_DIR || fallbackUserLogDir;
+
+try {
+  if (!process.env.LOG_PATH) {
+    console.info(`[Logging] LOG_PATH not set, falling back to ${fallbackLogPath}`);
+  }
+  if (!process.env.AUDIT_LOG_PATH) {
+    console.info(`[Logging] AUDIT_LOG_PATH not set, falling back to ${fallbackAuditPath}`);
+  }
+  if (!process.env.USER_LOG_DIR) {
+    console.info(`[Logging] USER_LOG_DIR not set, falling back to ${fallbackUserLogDir}`);
+  }
+} catch {}
 
 // Ensure directories exist
 const ensureDir = (targetPath) => {

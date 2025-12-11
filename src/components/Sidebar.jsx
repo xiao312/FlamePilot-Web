@@ -127,8 +127,13 @@ function Sidebar({
           return;
         }
         const data = await response.json();
-        if (isMounted && data.shellRoot) {
-          setShellRoot(data.shellRoot);
+        if (isMounted) {
+          if (data.shellRoot) {
+            setShellRoot(data.shellRoot);
+          }
+          if (data.userRoot) {
+            setNewProjectPath(prev => prev?.trim() ? prev : data.userRoot);
+          }
         }
       } catch (error) {
         console.error('Error fetching config:', error);
@@ -140,10 +145,12 @@ function Sidebar({
     };
   }, []);
 
-  // Prefill new project path when the form opens and SHELL_ROOT is available
+  // Prefill new project path when the form opens and a user root is available
   useEffect(() => {
-    if (showNewProject && shellRoot && !newProjectPath.trim()) {
-      setNewProjectPath(shellRoot);
+    if (showNewProject && !newProjectPath.trim()) {
+      if (shellRoot) {
+        setNewProjectPath(shellRoot);
+      }
     }
   }, [showNewProject, shellRoot, newProjectPath]);
 

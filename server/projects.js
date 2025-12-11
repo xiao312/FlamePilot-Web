@@ -185,8 +185,9 @@ async function extractProjectDirectory(projectName, uid = null) {
 async function getProjects(uid = null) {
   ensureShellRootExists();
   if (uid) ensureUserRoot(uid);
-  const base = uid ? getUserRoot(uid) : path.join(process.env.HOME, '.gemini');
-  const geminiDir = path.join(base, '.gemini', 'projects');
+  // Default project root is per-user .flamepilot/projects under USER_DATA_ROOT/SHELL_ROOT
+  const base = uid ? getUserRoot(uid) : path.join(process.env.HOME, '.flamepilot');
+  const geminiDir = path.join(base, '.flamepilot', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();

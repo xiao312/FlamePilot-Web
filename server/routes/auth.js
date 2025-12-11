@@ -71,8 +71,14 @@ router.post('/bohrium', async (req, res) => {
     const user = userDb.getOrCreateExternalUser(cleanedUid);
     userDb.updateLastLogin(user.id);
 
-    logger.info('[Auth] Bohrium login', { action: 'bohrium_login', uid: cleanedUid, userId: user.id });
-    auditLogger.info('bohrium_login', { uid: cleanedUid, userId: user.id, email, name });
+    logger.info('[Auth] Bohrium login', { action: 'bohrium_login', uid: cleanedUid, userId: user.id, identitySource: 'user-info' });
+    auditLogger.info('bohrium_login', { uid: cleanedUid, userId: user.id, email, name, identitySource: 'user-info' });
+    // Touch per-user log file on login so it exists before any chat usage
+    try {
+      await logUserEvent(cleanedUid, 'login', { userId: user.id, email, name, identitySource: 'user-info' });
+    } catch (err) {
+      // Swallow errors; logging should not block auth
+    }
 
     const token = generateToken(user);
     return res.json({

@@ -3,7 +3,8 @@ import path from 'path';
 
 // Returns the resolved shell root path from env (or null if not set)
 export function getShellRoot() {
-  const root = process.env.SHELL_ROOT;
+  // Prefer USER_DATA_ROOT as the single source of truth; fall back to SHELL_ROOT for legacy
+  const root = process.env.USER_DATA_ROOT || process.env.SHELL_ROOT;
   return root ? path.resolve(root) : null;
 }
 

@@ -1,11 +1,45 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const DEFAULT_ROOT_BASE = '/data';
-const USER_QUOTA_BYTES = Number(process.env.USER_QUOTA_BYTES || 1_000_000_000); // default 1GB
+// Load .env early so USER_DATA_ROOT is available when this module initializes
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+try {
+  const envPath = path.join(__dirname, '../.env');
+  const envFile = fs.readFileSync(envPath, 'utf8');
+  envFile.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const [key, ...rest] = trimmed.split('=');
+    if (key && rest.length && !process.env[key]) {
+      process.env[key] = rest.join('=').trim();
+    }
+  });
+} catch {
+  // Ignore if .env is missing; will fall back to defaults
+}
+
+const DEFAULT_ROOT_BASE = '/data/flamepilot/usr';
+const DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5GB default
+const USER_QUOTA_BYTES = Number(process.env.USER_QUOTA_BYTES || DEFAULT_QUOTA_BYTES);
+
+let rootLogged = false;
+let quotaLogged = false;
 
 export function getUserRoot(uid) {
-  const base = process.env.USER_DATA_ROOT || DEFAULT_ROOT_BASE;
+// Prefer explicit per-user root, fall back to SHELL_ROOT, then default
+let base = process.env.USER_DATA_ROOT || process.env.SHELL_ROOT || DEFAULT_ROOT_BASE;
+  if (!rootLogged) {
+    if (process.env.USER_DATA_ROOT) {
+      console.info(`[Storage] Using USER_DATA_ROOT=${process.env.USER_DATA_ROOT}`);
+    } else if (process.env.SHELL_ROOT) {
+      console.info(`[Storage] USER_DATA_ROOT not set, falling back to SHELL_ROOT=${process.env.SHELL_ROOT}`);
+    } else {
+      console.info(`[Storage] USER_DATA_ROOT and SHELL_ROOT not set, falling back to default ${DEFAULT_ROOT_BASE}`);
+    }
+    rootLogged = true;
+  }
   return path.join(base, String(uid || 'anonymous'));
 }
 
@@ -13,10 +47,8 @@ export function ensureUserRoot(uid) {
   const root = getUserRoot(uid);
   const subdirs = [
     root,
-    path.join(root, '.gemini'),
-    path.join(root, '.gemini', 'projects'),
-    path.join(root, 'tmp'),
-    path.join(root, 'logs')
+    path.join(root, '.flamepilot'),
+    path.join(root, '.flamepilot', 'projects')
   ];
   subdirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
@@ -27,6 +59,10 @@ export function ensureUserRoot(uid) {
 }
 
 export function getQuotaLimitBytes() {
+  if (!quotaLogged && !process.env.USER_QUOTA_BYTES) {
+    console.info(`[Storage] USER_QUOTA_BYTES not set, using default ${DEFAULT_QUOTA_BYTES} bytes (5GB)`);
+    quotaLogged = true;
+  }
   return USER_QUOTA_BYTES;
 }
 
