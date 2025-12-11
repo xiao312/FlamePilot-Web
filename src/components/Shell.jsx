@@ -39,6 +39,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const terminalDisabled = true; // Temporary disable for safety
 
   // Connect to shell function
   const connectToShell = () => {
@@ -56,6 +57,13 @@ function Shell({ selectedProject, selectedSession, isActive }) {
 
     if (!isInitialized || isConnected || isConnecting) {
       console.log('Cannot connect:', { isInitialized, isConnected, isConnecting });
+      return;
+    }
+
+    if (terminalDisabled) {
+      if (terminal.current) {
+        terminal.current.writeln('\u001b[1;33mShell temporarily unavailable: temp closed due to server safety concerns.\u001b[0m');
+      }
       return;
     }
 
@@ -397,6 +405,10 @@ function Shell({ selectedProject, selectedSession, isActive }) {
 
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
+    if (terminalDisabled) {
+      return;
+    }
+
     if (isConnecting || isConnected) {
       return;
     }

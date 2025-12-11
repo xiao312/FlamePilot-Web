@@ -2,7 +2,26 @@ import { transports, createLogger, format } from 'winston';
 import 'winston-daily-rotate-file';
 import * as fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { promises as fsPromises } from 'fs';
+
+// Load .env early to ensure log paths are available even if the entrypoint loads env later
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+try {
+  const envPath = path.join(__dirname, '../.env');
+  const envFile = fs.readFileSync(envPath, 'utf8');
+  envFile.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const [key, ...rest] = trimmed.split('=');
+    if (key && rest.length && !process.env[key]) {
+      process.env[key] = rest.join('=').trim();
+    }
+  });
+} catch {
+  // Ignore missing .env; fall back to defaults or process env
+}
 
 // Paths for application (general) and audit (detailed) logs
 const logPath = process.env.LOG_PATH || 'logs/application-%DATE%.log';
@@ -10,15 +29,25 @@ const auditPath = process.env.AUDIT_LOG_PATH || 'logs/audit-%DATE%.log';
 const userLogDir = process.env.USER_LOG_DIR || path.join('logs', 'users');
 
 // Ensure directories exist
-for (const p of [logPath, auditPath]) {
-  const dir = p.split('/')[0];
+const ensureDir = (targetPath) => {
+  if (!targetPath) return;
+  const dir = path.dirname(targetPath);
+  if (!dir || dir === '.') return;
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-}
-if (!fs.existsSync(userLogDir)) {
+};
+
+ensureDir(logPath);
+ensureDir(auditPath);
+if (userLogDir && !fs.existsSync(userLogDir)) {
   fs.mkdirSync(userLogDir, { recursive: true });
 }
+
+// Log destinations to console for visibility
+try {
+  console.info('[Logging] Destinations', { app: logPath, audit: auditPath, users: userLogDir });
+} catch {}
 
 const appFileTransport = new transports.DailyRotateFile({
   filename: logPath,
@@ -39,11 +68,12 @@ const auditFileTransport = new transports.DailyRotateFile({
 const consoleTransport = new transports.Console({
   format: format.combine(
     format((info) => (info.console ? info : false))(),
+    format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     format.colorize(),
     format.printf(info => {
       const userLabel = info.user || info.username || info.uid || 'anonymous';
       const action = info.action || info.message;
-      return `[${userLabel}] ${action}`;
+      return `${info.timestamp} ${info.level}: [${userLabel}] ${action}`;
     })
   )
 });
