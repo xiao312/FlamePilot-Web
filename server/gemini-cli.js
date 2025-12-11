@@ -109,6 +109,9 @@ async function spawnGemini(command, options = {}, ws) {
     const clientName = isDevMode ? (process.env.CLIENT_NAME || options.clientName) : options.clientName;
     const rawSku = isDevMode ? (process.env.SKU_ID || options.skuId) : options.skuId;
     const identitySource = isDevMode ? 'dev_env' : (options.user ? 'user' : 'none');
+    if (!isDevMode && identitySource === 'none') {
+      logger.warn('[Auth] No user identity provided in production mode', { action: 'missing_identity', uid, identitySource });
+    }
     const skuId = Number(rawSku);
 
     const hasValidCredentials = Boolean(
@@ -168,6 +171,7 @@ async function spawnGemini(command, options = {}, ws) {
       willBill: shouldBill,
       whitelistCount: whitelistAccessKeys.size,
       identitySource,
+      identityUser: options.user || null,
       console: false
     });
 
